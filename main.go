@@ -34,7 +34,6 @@ func main() {
 		fmt.Printf("Failed to parse config: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("cfg", cfg, "paypal", cfg.Paypal)
 
 	paypalClient := client.NewPaypalClient(&cfg.Paypal)
 	paypalService := services.NewPaypalService(paypalClient, cfg.BaseURL)

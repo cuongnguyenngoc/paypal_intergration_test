@@ -49,6 +49,24 @@ func (h *PaypalHandler) Pay(c echo.Context) error {
 	})
 }
 
+func (h *PaypalHandler) HandleSuccess(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	orderID := c.QueryParam("token")
+	if orderID == "" {
+		return c.String(400, "missing order token")
+	}
+
+	err := h.paypalService.CaptureOrder(ctx, orderID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"message": "success",
+	})
+}
+
 func (h *PaypalHandler) PayPalWebhook(c echo.Context) error {
 	var payload map[string]interface{}
 	if err := c.Bind(&payload); err != nil {

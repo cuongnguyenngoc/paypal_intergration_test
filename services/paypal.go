@@ -9,15 +9,18 @@ import (
 
 type PaypalService interface {
 	Pay(ctx context.Context, email string, items []*models.Item) (*client.CreateOrderResponse, error)
+	CaptureOrder(ctx context.Context, orderID string) error
 }
 
 type paypalServiceImpl struct {
-	paypalClient client.PaypalClient
+	paypalClient   client.PaypalClient
+	serviceBaseUrl string
 }
 
-func NewPaypalService(paypalClient client.PaypalClient) PaypalService {
+func NewPaypalService(paypalClient client.PaypalClient, serviceBaseUrl string) PaypalService {
 	return &paypalServiceImpl{
-		paypalClient: paypalClient,
+		paypalClient:   paypalClient,
+		serviceBaseUrl: serviceBaseUrl,
 	}
 }
 
@@ -38,5 +41,9 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, email string, items []*mode
 	order.TotalAmount = total
 	db.DB.Save(&order)
 
-	return s.paypalClient.CreateOrder(ctx)
+	return s.paypalClient.CreateOrder(ctx, s.serviceBaseUrl)
+}
+
+func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) error {
+	return s.paypalClient.CaptureOrder(ctx, orderID)
 }

@@ -14,6 +14,7 @@ import (
 
 type PaypalClient interface {
 	CreateOrder(ctx context.Context, serviceBaseUrl string) (*CreateOrderResponse, error)
+	CaptureOrder(ctx context.Context, orderID string) error
 }
 
 type paypalClientImpl struct {
@@ -95,7 +96,7 @@ func (c *paypalClientImpl) CreateOrder(ctx context.Context, serviceBaseUrl strin
 		},
 		"application_context": map[string]string{
 			"return_url": fmt.Sprintf("%s/api/paypal/success", serviceBaseUrl),
-			"cancel_url": fmt.Sprintf("%s/api/paypal/cancel", serviceBaseUrl),
+			"cancel_url": fmt.Sprintf("%s", serviceBaseUrl), // if user cancel during paypal payment, return to our homepage
 		},
 	}
 
@@ -134,6 +135,52 @@ func (c *paypalClientImpl) CreateOrder(ctx context.Context, serviceBaseUrl strin
 		OrderID:    result.ID,
 		ApproveURL: approveURL,
 	}, nil
+}
+
+func (c *paypalClientImpl) CaptureOrder(ctx context.Context, orderID string) error {
+	accessToken, err := c.getAccessToken()
+	if err != nil {
+		return fmt.Errorf("get paypal access token: %w", err)
+	}
+
+	url := fmt.Sprintf(
+		"%s/v2/checkout/orders/%s/capture",
+		c.baseApiURL,
+		orderID,
+	)
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		url,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("create capture request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("paypal capture request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf(
+			"paypal capture failed: status=%d body=%s",
+			resp.StatusCode,
+			string(body),
+		)
+	}
+
+	// Optional: decode response if want details
+	// For now, success response means capture accepted
+	return nil
 }
 
 func _extractApproveURL(links []PaypalLink) string {
