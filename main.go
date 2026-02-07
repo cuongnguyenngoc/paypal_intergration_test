@@ -37,7 +37,7 @@ func main() {
 	fmt.Println("cfg", cfg, "paypal", cfg.Paypal)
 
 	paypalClient := client.NewPaypalClient(&cfg.Paypal)
-	paypalService := services.NewPaypalService(paypalClient)
+	paypalService := services.NewPaypalService(paypalClient, cfg.BaseURL)
 
 	serverAddr := cfg.HTTP.Host + ":" + cfg.HTTP.Port
 

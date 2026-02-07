@@ -13,7 +13,7 @@ import (
 )
 
 type PaypalClient interface {
-	CreateOrder(ctx context.Context) (*CreateOrderResponse, error)
+	CreateOrder(ctx context.Context, serviceBaseUrl string) (*CreateOrderResponse, error)
 }
 
 type paypalClientImpl struct {
@@ -77,7 +77,7 @@ func (c *paypalClientImpl) getAccessToken() (string, error) {
 	return res.AccessToken, nil
 }
 
-func (c *paypalClientImpl) CreateOrder(ctx context.Context) (*CreateOrderResponse, error) {
+func (c *paypalClientImpl) CreateOrder(ctx context.Context, serviceBaseUrl string) (*CreateOrderResponse, error) {
 	accessToken, err := c.getAccessToken()
 	if err != nil {
 		return nil, fmt.Errorf("get paypal access token: %w", err)
@@ -94,8 +94,8 @@ func (c *paypalClientImpl) CreateOrder(ctx context.Context) (*CreateOrderRespons
 			},
 		},
 		"application_context": map[string]string{
-			"return_url": "http://localhost:8080/success",
-			"cancel_url": "http://localhost:8080/cancel",
+			"return_url": fmt.Sprintf("%s/api/paypal/success", serviceBaseUrl),
+			"cancel_url": fmt.Sprintf("%s/api/paypal/cancel", serviceBaseUrl),
 		},
 	}
 
