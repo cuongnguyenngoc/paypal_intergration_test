@@ -63,7 +63,7 @@ func (h *PaypalHandler) HandleSuccess(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"message": "success",
+		"message": "Payment approved. Processing...",
 	})
 }
 
