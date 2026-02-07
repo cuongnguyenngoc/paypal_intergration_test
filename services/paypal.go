@@ -8,7 +8,7 @@ import (
 )
 
 type PaypalService interface {
-	Pay(ctx context.Context, email string, items []*models.Item) (map[string]interface{}, error)
+	Pay(ctx context.Context, email string, items []*models.Item) (*client.CreateOrderResponse, error)
 }
 
 type paypalServiceImpl struct {
@@ -21,7 +21,7 @@ func NewPaypalService(paypalClient client.PaypalClient) PaypalService {
 	}
 }
 
-func (s *paypalServiceImpl) Pay(ctx context.Context, email string, items []*models.Item) (map[string]interface{}, error) {
+func (s *paypalServiceImpl) Pay(ctx context.Context, email string, items []*models.Item) (*client.CreateOrderResponse, error) {
 	order := models.Order{Email: email, Status: "CREATED"}
 	db.DB.Create(&order)
 
@@ -38,5 +38,5 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, email string, items []*mode
 	order.TotalAmount = total
 	db.DB.Save(&order)
 
-	return s.paypalClient.Pay(ctx)
+	return s.paypalClient.CreateOrder(ctx)
 }

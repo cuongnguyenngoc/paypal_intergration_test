@@ -6,13 +6,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"paypal-integration-demo/config"
 	"time"
 )
 
 type PaypalClient interface {
-	Pay(ctx context.Context) (map[string]interface{}, error)
+	CreateOrder(ctx context.Context) (*CreateOrderResponse, error)
 }
 
 type paypalClientImpl struct {
@@ -20,6 +21,22 @@ type paypalClientImpl struct {
 	baseApiURL         string
 	paypalClientID     string
 	paypalClientSecret string
+}
+
+type PaypalLink struct {
+	Rel  string `json:"rel"`
+	Href string `json:"href"`
+}
+
+type PaypalCreateOrderResult struct {
+	ID     string       `json:"id"`
+	Links  []PaypalLink `json:"links"`
+	Status string       `json:"status"`
+}
+
+type CreateOrderResponse struct {
+	OrderID    string
+	ApproveURL string
 }
 
 func NewPaypalClient(paypalCfg *config.Paypal) PaypalClient {
@@ -60,7 +77,7 @@ func (c *paypalClientImpl) getAccessToken() (string, error) {
 	return res.AccessToken, nil
 }
 
-func (c *paypalClientImpl) Pay(ctx context.Context) (map[string]interface{}, error) {
+func (c *paypalClientImpl) CreateOrder(ctx context.Context) (*CreateOrderResponse, error) {
 	accessToken, err := c.getAccessToken()
 	if err != nil {
 		return nil, fmt.Errorf("get paypal access token: %w", err)
@@ -99,9 +116,31 @@ func (c *paypalClientImpl) Pay(ctx context.Context) (map[string]interface{}, err
 	resp, _ := c.httpClient.Do(req)
 	defer resp.Body.Close()
 
-	var result map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&result)
-	fmt.Println("result", result)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("paypal error %d: %s", resp.StatusCode, string(b))
+	}
 
-	return result, nil
+	var result PaypalCreateOrderResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode paypal response: %w", err)
+	}
+
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	approveURL := _extractApproveURL(result.Links)
+
+	return &CreateOrderResponse{
+		OrderID:    result.ID,
+		ApproveURL: approveURL,
+	}, nil
+}
+
+func _extractApproveURL(links []PaypalLink) string {
+	for _, link := range links {
+		if link.Rel == "approve" {
+			return link.Href
+		}
+	}
+	return ""
 }

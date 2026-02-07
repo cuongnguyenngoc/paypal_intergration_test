@@ -17,9 +17,15 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v10"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// load .env into os.Environ
+	if err := godotenv.Load(); err != nil {
+		fmt.Println("No .env file found (ok in prod)")
+	}
+
 	db.Init()
 	db.DB.AutoMigrate(&models.Order{}, &models.OrderItem{}, &models.Vault{})
 
@@ -28,6 +34,7 @@ func main() {
 		fmt.Printf("Failed to parse config: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Println("cfg", cfg, "paypal", cfg.Paypal)
 
 	paypalClient := client.NewPaypalClient(&cfg.Paypal)
 	paypalService := services.NewPaypalService(paypalClient)

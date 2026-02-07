@@ -28,6 +28,7 @@ type Vault struct {
 }
 
 type Item struct {
+	Sku      string  `json:"sku"`
 	Type     string  `json:"type"`
 	Price    float64 `json:"price"`
 	Quantity int     `json:"quantity"`

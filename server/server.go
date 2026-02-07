@@ -16,6 +16,8 @@ type Server struct {
 func NewServer(paypalService services.PaypalService) *Server {
 	e := echo.New()
 
+	e.File("/", "web/index.html")
+
 	e.Use(middleware.RequestLogger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())

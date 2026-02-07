@@ -22,6 +22,12 @@ func NewPaypalHandler(paypalService services.PaypalService) *PaypalHandler {
 type PayRequest struct {
 	Email string         `json:"email"`
 	Items []*models.Item `json:"items"`
+	Vault bool           `json:"vault"`
+}
+
+type PayResponse struct {
+	OrderID          string `json:"order_id"`
+	OrderApprovalURL string `json:"order_approval_url"`
 }
 
 func (h *PaypalHandler) Pay(c echo.Context) error {
@@ -37,7 +43,10 @@ func (h *PaypalHandler) Pay(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, result)
+	return c.JSON(http.StatusOK, &PayResponse{
+		OrderID:          result.OrderID,
+		OrderApprovalURL: result.ApproveURL,
+	})
 }
 
 func (h *PaypalHandler) PayPalWebhook(c echo.Context) error {

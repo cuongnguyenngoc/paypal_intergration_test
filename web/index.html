@@ -1,0 +1,21 @@
+<button onclick="pay()">Pay Now</button>
+
+<script>
+async function pay() {
+  const res = await fetch("/api/pay", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: "cuong94@gmail.com",
+      items: [
+        { sku: "coin_100", price: 100, type: "one_time", quantity: 1 }
+      ],
+      vault: true
+    })
+  })
+
+  const data = await res.json();
+  console.log("data", data)
+  window.location.href = data.order_approval_url
+}
+</script>
