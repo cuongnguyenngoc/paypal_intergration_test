@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
+	"paypal-integration-demo/models"
 	"paypal-integration-demo/services"
 
 	"github.com/labstack/echo/v4"
@@ -18,23 +20,42 @@ func NewPaypalHandler(paypalService services.PaypalService) *PaypalHandler {
 }
 
 type PayRequest struct {
-	Email string `json:"email"`
-	Items []struct {
-		Type     string  `json:"type"`
-		Price    float64 `json:"price"`
-		Quantity int     `json:"quantity"`
-	} `json:"items"`
+	Email string         `json:"email"`
+	Items []*models.Item `json:"items"`
 }
 
 func (h *PaypalHandler) Pay(c echo.Context) error {
-	// ctx := c.Request().Context()
+	ctx := c.Request().Context()
 
 	var req PayRequest
 	if err := c.Bind(&req); err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{
-		"message": "Pay success",
-	})
+	result, err := h.paypalService.Pay(ctx, req.Email, req.Items)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+func (h *PaypalHandler) PayPalWebhook(c echo.Context) error {
+	var payload map[string]interface{}
+	if err := c.Bind(&payload); err != nil {
+		return c.NoContent(http.StatusBadRequest)
+	}
+
+	eventType := payload["event_type"].(string)
+
+	switch eventType {
+	case "PAYMENT.CAPTURE.COMPLETED":
+		// mark order as paid
+		fmt.Println("payment completed")
+	case "BILLING.SUBSCRIPTION.ACTIVATED":
+		// activate subscription
+		fmt.Println("subscription activated")
+	}
+
+	return c.NoContent(http.StatusOK)
 }

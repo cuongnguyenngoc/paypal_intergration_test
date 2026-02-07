@@ -26,3 +26,9 @@ type Vault struct {
 	Token     string
 	CreatedAt time.Time
 }
+
+type Item struct {
+	Type     string  `json:"type"`
+	Price    float64 `json:"price"`
+	Quantity int     `json:"quantity"`
+}

@@ -41,6 +41,7 @@ func (s *Server) setupRoutes() {
 	})
 
 	api.POST("/pay", s.paypalHandler.Pay)
+	api.POST("/paypal/webhook", s.paypalHandler.PayPalWebhook)
 }
 
 func (s *Server) Start(address string) error {
