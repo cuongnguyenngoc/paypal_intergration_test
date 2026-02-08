@@ -50,9 +50,48 @@ func (h *PaypalHandler) HandleSuccess(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{
-		"message": "Payment approved. Processing...",
-	})
+	html := `
+	<!DOCTYPE html>
+	<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Payment Processing</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				text-align: center;
+				margin-top: 80px;
+			}
+			.countdown {
+				font-size: 24px;
+				font-weight: bold;
+			}
+		</style>
+	</head>
+	<body>
+		<h2>Payment approved</h2>
+		<p>We are processing your payment.</p>
+		<p>Redirecting to homepage in <span class="countdown" id="countdown">10</span> seconds…</p>
+
+		<script>
+			let seconds = 20;
+			const el = document.getElementById("countdown");
+
+			const timer = setInterval(function () {
+				seconds--;
+				el.textContent = seconds;
+
+				if (seconds <= 0) {
+					clearInterval(timer);
+					window.location.href = "/";
+				}
+			}, 1000);
+		</script>
+	</body>
+	</html>
+	`
+
+	return c.HTML(http.StatusOK, html)
 }
 
 func (h *PaypalHandler) PayPalWebhook(c echo.Context) error {
