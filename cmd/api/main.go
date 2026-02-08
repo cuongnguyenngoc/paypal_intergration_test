@@ -34,12 +34,19 @@ func main() {
 	db := client.InitMysqlClient(cfg.DatabaseURL)
 	paypalClient := client.NewPaypalClient(&cfg.Paypal)
 
+	productRepo := repository.NewProductRepository(db)
+	err := productRepo.Seed()
+	if err != nil {
+		log.Fatal("seed some products data into db")
+	}
+
 	orderRepo := repository.NewOrderRepository(db)
 	captureRepo := repository.NewCaptureRepository(db)
 	webhookEventRepo := repository.NewWebhookEventRepository(db)
 
 	paypalService := service.NewPaypalService(
 		paypalClient, cfg.BaseURL,
+		productRepo,
 		orderRepo,
 		captureRepo,
 		webhookEventRepo,

@@ -8,9 +8,10 @@ import (
 
 type OrderRepository interface {
 	Create(order *model.Order) error
-	FindByPayPalOrderID(orderID string) (*model.Order, error)
+	FindByOrderID(orderID string) (*model.Order, error)
 	MarkPaid(orderID string) error
 	IsPaid(orderID string) (bool, error)
+	CreateOrderItems(items []*model.OrderItem) error
 }
 
 type orderRepoImpl struct {
@@ -27,7 +28,7 @@ func (r *orderRepoImpl) Create(order *model.Order) error {
 	return r.db.Create(order).Error
 }
 
-func (r *orderRepoImpl) FindByPayPalOrderID(orderID string) (*model.Order, error) {
+func (r *orderRepoImpl) FindByOrderID(orderID string) (*model.Order, error) {
 	var order model.Order
 	err := r.db.
 		Where("order_id = ?", orderID).
@@ -54,4 +55,8 @@ func (r *orderRepoImpl) IsPaid(orderID string) (bool, error) {
 		Count(&count).Error
 
 	return count > 0, err
+}
+
+func (r *orderRepoImpl) CreateOrderItems(items []*model.OrderItem) error {
+	return r.db.Create(&items).Error
 }

@@ -2,11 +2,18 @@ package model
 
 import "time"
 
+type Product struct {
+	ID       string `gorm:"primaryKey;size:64;not null"` // product sku
+	Price    int32  `gorm:"not null"`
+	Currency string `gorm:"size:8;not null"`
+	Type     string `gorm:"size:32;index;not null"` // ONE_TIME, SUBSCRIPTION
+}
+
 type Order struct {
-	OrderID   string `gorm:"primaryKey;size:64;uniqueIndex;not null"` // paypal order id
-	Status    string `gorm:"size:32;index;not null"`                  // CREATED, APPROVED, PAID, FAILED
-	PayerID   string `gorm:"size:32;index;not null"`                  // buyer
-	Amount    int32  `gorm:"not null"`                                // total amount (sum of items)
+	OrderID   string `gorm:"primaryKey;size:64;not null"` // paypal order id
+	Status    string `gorm:"size:32;index;not null"`      // CREATED, APPROVED, PAID, FAILED
+	PayerID   string `gorm:"size:32;index;not null"`      // buyer
+	Amount    int32  `gorm:"not null"`                    // total amount (sum of items)
 	Currency  string `gorm:"size:8;not null"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -14,17 +21,18 @@ type Order struct {
 
 type OrderItem struct {
 	ID uint `gorm:"primaryKey"`
-	// FK → orders.order_id
+	// FK → order.order_id
 	OrderID string `gorm:"size:64;index;not null"`
-	// Product info (snapshot at purchase time)
-	ProductID   string `gorm:"size:64;index;not null"`
-	ProductType string `gorm:"size:32;not null"` // ONE_TIME, SUBSCRIPTION
-	Quantity    int32  `gorm:"not null"`
-	UnitPrice   int32  `gorm:"not null"` // price per item
-	Currency    string `gorm:"size:8;not null"`
-	CreatedAt   time.Time
+	// FK → product.id
+	ProductID string `gorm:"size:64;index;not null"`
+	Quantity  int32  `gorm:"not null"`
+	UnitPrice int32  `gorm:"not null"`
+	Currency  string `gorm:"size:8;not null"`
 
-	Order Order `gorm:"foreignKey:OrderID;references:OrderID;constraint:OnDelete:CASCADE;"`
+	CreatedAt time.Time
+
+	Order   Order   `gorm:"foreignKey:OrderID;references:OrderID;constraint:OnDelete:CASCADE;"`
+	Product Product `gorm:"foreignKey:ProductID;references:ID;constraint:OnDelete:CASCADE;"`
 }
 
 type Capture struct {
@@ -55,11 +63,4 @@ type WebhookEvent struct {
 	EventType   string `gorm:"size:64;index"`
 	ProcessedAt time.Time
 	CreatedAt   time.Time
-}
-
-type Item struct {
-	Sku      string  `json:"sku"`
-	Type     string  `json:"type"`
-	Price    float64 `json:"price"`
-	Quantity int     `json:"quantity"`
 }

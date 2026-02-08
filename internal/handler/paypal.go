@@ -3,7 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
-	"paypal-integration-demo/internal/model"
+	"paypal-integration-demo/internal/dto"
 	"paypal-integration-demo/internal/service"
 
 	"github.com/labstack/echo/v4"
@@ -20,9 +20,9 @@ func NewPaypalHandler(paypalService service.PaypalService) *PaypalHandler {
 }
 
 type PayRequest struct {
-	Email string        `json:"email"`
-	Items []*model.Item `json:"items"`
-	Vault bool          `json:"vault"`
+	Email string      `json:"email"`
+	Items []*dto.Item `json:"items"`
+	Vault bool        `json:"vault"`
 }
 
 type PayResponse struct {

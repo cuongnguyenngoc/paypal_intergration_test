@@ -27,6 +27,7 @@ func InitMysqlClient(databaseURL string) *gorm.DB {
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	if err := db.AutoMigrate(
+		&model.Product{},
 		&model.Order{},
 		&model.Capture{},
 		&model.Subscription{},
