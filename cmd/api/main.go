@@ -9,8 +9,7 @@ import (
 	"os/signal"
 	"paypal-integration-demo/internal/client"
 	"paypal-integration-demo/internal/config"
-	"paypal-integration-demo/internal/db"
-	"paypal-integration-demo/internal/model"
+	"paypal-integration-demo/internal/repository"
 	"paypal-integration-demo/internal/server"
 	"paypal-integration-demo/internal/service"
 	"syscall"
@@ -26,17 +25,25 @@ func main() {
 		fmt.Println("No .env file found (ok in prod)")
 	}
 
-	db.Init()
-	db.DB.AutoMigrate(&model.Order{}, &model.OrderItem{}, &model.Vault{})
-
 	cfg := &config.Config{}
 	if err := env.Parse(cfg); err != nil {
 		fmt.Printf("Failed to parse config: %v\n", err)
 		os.Exit(1)
 	}
 
+	db := client.InitMysqlClient(cfg.DatabaseURL)
 	paypalClient := client.NewPaypalClient(&cfg.Paypal)
-	paypalService := service.NewPaypalService(paypalClient, cfg.BaseURL)
+
+	orderRepo := repository.NewOrderRepository(db)
+	captureRepo := repository.NewCaptureRepository(db)
+	webhookEventRepo := repository.NewWebhookEventRepository(db)
+
+	paypalService := service.NewPaypalService(
+		paypalClient, cfg.BaseURL,
+		orderRepo,
+		captureRepo,
+		webhookEventRepo,
+	)
 
 	serverAddr := cfg.HTTP.Host + ":" + cfg.HTTP.Port
 

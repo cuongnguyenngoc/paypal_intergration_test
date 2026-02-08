@@ -5,6 +5,7 @@ type Config struct {
 	Log         Log
 	HTTP        HTTPServer
 	BaseURL     string `env:"BASE_URL"`
+	DatabaseURL string `env:"DATABASE_URL"`
 
 	Paypal Paypal `envPrefix:"PAYPAL_"`
 }

@@ -29,15 +29,26 @@ type PaypalLink struct {
 	Href string `json:"href"`
 }
 
+type PaypalAccount struct {
+	AccountID    string `json:"account_id"`
+	EmailAddress string `json:"email_address"`
+}
+
+type PaymentSource struct {
+	PaypalAccount PaypalAccount `json:"paypal"`
+}
+
 type PaypalCreateOrderResult struct {
-	ID     string       `json:"id"`
-	Links  []PaypalLink `json:"links"`
-	Status string       `json:"status"`
+	ID            string        `json:"id"`
+	Links         []PaypalLink  `json:"links"`
+	Status        string        `json:"status"`
+	PaymentSource PaymentSource `json:"payment_source"`
 }
 
 type CreateOrderResponse struct {
-	OrderID    string
-	ApproveURL string
+	OrderID       string
+	ApproveURL    string
+	PaypalAccount PaypalAccount
 }
 
 func NewPaypalClient(paypalCfg *config.Paypal) PaypalClient {
@@ -127,13 +138,12 @@ func (c *paypalClientImpl) CreateOrder(ctx context.Context, serviceBaseUrl strin
 		return nil, fmt.Errorf("decode paypal response: %w", err)
 	}
 
-	json.NewDecoder(resp.Body).Decode(&result)
-
 	approveURL := _extractApproveURL(result.Links)
 
 	return &CreateOrderResponse{
-		OrderID:    result.ID,
-		ApproveURL: approveURL,
+		OrderID:       result.ID,
+		ApproveURL:    approveURL,
+		PaypalAccount: result.PaymentSource.PaypalAccount,
 	}, nil
 }
 
