@@ -78,7 +78,7 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, email string, items []*dto.
 		}
 	}
 
-	err = s.orderRepo.CreateOrUpdate(&model.Order{
+	err = s.orderRepo.Create(&model.Order{
 		OrderID:  resp.OrderID,
 		Status:   resp.Status,
 		Amount:   totalAmount,
@@ -105,9 +105,5 @@ func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) er
 		return fmt.Errorf("paypal api capture order: %w", err)
 	}
 
-	return s.orderRepo.CreateOrUpdate(&model.Order{
-		OrderID: orderID,
-		Status:  resp.Status,
-		PayerID: resp.PayerID,
-	})
+	return s.orderRepo.MarkCompleted(orderID, resp.PayerID)
 }

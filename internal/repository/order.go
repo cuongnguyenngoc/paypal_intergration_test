@@ -4,13 +4,13 @@ import (
 	"paypal-integration-demo/internal/model"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type OrderRepository interface {
-	CreateOrUpdate(order *model.Order) error
+	Create(order *model.Order) error
 	FindByOrderID(orderID string) (*model.Order, error)
-	MarkStatus(orderID string, status string) error
+	MarkCompleted(orderID string, payerID string) error
+	MarkPaid(orderID string) error
 	IsPaid(orderID string) (bool, error)
 	CreateOrderItems(items []*model.OrderItem) error
 }
@@ -25,21 +25,8 @@ func NewOrderRepository(db *gorm.DB) OrderRepository {
 	}
 }
 
-func (r *orderRepoImpl) CreateOrUpdate(order *model.Order) error {
-	return r.db.Clauses(
-		clause.OnConflict{
-			Columns: []clause.Column{
-				{Name: "order_id"},
-			},
-			DoUpdates: clause.AssignmentColumns([]string{
-				"status",
-				"payer_id",
-				"amount",
-				"currency",
-				"updated_at",
-			}),
-		},
-	).Create(order).Error
+func (r *orderRepoImpl) Create(order *model.Order) error {
+	return r.db.Create(order).Error
 }
 
 func (r *orderRepoImpl) FindByOrderID(orderID string) (*model.Order, error) {
@@ -55,10 +42,26 @@ func (r *orderRepoImpl) FindByOrderID(orderID string) (*model.Order, error) {
 	return &order, nil
 }
 
-func (r *orderRepoImpl) MarkStatus(orderID string, status string) error {
+func (r *orderRepoImpl) MarkCompleted(orderID string, payerID string) error {
 	return r.db.Model(&model.Order{}).
-		Where("order_id = ?", orderID).
-		Update("status", status).Error
+		Where(`
+			order_id = ?
+			AND status IN ?
+			AND (payer_id = '' OR payer_id IS NULL)
+		`,
+			orderID,
+			[]string{"CREATED", "APPROVED"},
+		).
+		Updates(map[string]interface{}{
+			"status":   "COMPLETED",
+			"payer_id": payerID,
+		}).Error
+}
+
+func (r *orderRepoImpl) MarkPaid(orderID string) error {
+	return r.db.Model(&model.Order{}).
+		Where(`order_id = ? AND status = ?`, orderID, "COMPLETED").
+		Update("status", "PAID").Error
 }
 
 func (r *orderRepoImpl) IsPaid(orderID string) (bool, error) {
