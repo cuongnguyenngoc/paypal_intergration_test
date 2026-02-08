@@ -42,12 +42,14 @@ func main() {
 
 	orderRepo := repository.NewOrderRepository(db)
 	webhookEventRepo := repository.NewWebhookEventRepository(db)
+	inventoryRepo := repository.NewInventoryRepository(db)
 
 	paypalService := service.NewPaypalService(
 		paypalClient, cfg.BaseURL,
 		productRepo,
 		orderRepo,
 		webhookEventRepo,
+		inventoryRepo,
 	)
 
 	serverAddr := cfg.HTTP.Host + ":" + cfg.HTTP.Port

@@ -21,6 +21,7 @@ type paypalServiceImpl struct {
 	productRepo      repository.ProductRepository
 	orderRepo        repository.OrderRepository
 	webhookEventRepo repository.WebhookEventRepository
+	inventoryRepo    repository.InventoryRepository
 }
 
 func NewPaypalService(
@@ -29,6 +30,7 @@ func NewPaypalService(
 	productRepo repository.ProductRepository,
 	orderRepo repository.OrderRepository,
 	webhookEventRepo repository.WebhookEventRepository,
+	inventoryRepo repository.InventoryRepository,
 ) PaypalService {
 	return &paypalServiceImpl{
 		paypalClient:     paypalClient,
@@ -36,6 +38,7 @@ func NewPaypalService(
 		productRepo:      productRepo,
 		orderRepo:        orderRepo,
 		webhookEventRepo: webhookEventRepo,
+		inventoryRepo:    inventoryRepo,
 	}
 }
 
@@ -129,7 +132,27 @@ func (s *paypalServiceImpl) handleOrderPaid(ctx context.Context, eventPayload *m
 		return fmt.Errorf("could not find order_id in webhook payload")
 	}
 
-	// todo: give item to user inventory
+	orderInfo, err := s.orderRepo.MarkPaid(orderID)
+	if err != nil {
+		return fmt.Errorf("mark order paid: %w", err)
+	}
 
-	return s.orderRepo.MarkPaid(orderID)
+	orderItems, err := s.orderRepo.GetOrderItems(orderID)
+	if err != nil {
+		return fmt.Errorf("get order items: %w", err)
+	}
+
+	// grant items to user inventory
+	for _, item := range orderItems {
+		err = s.inventoryRepo.Upsert(ctx, &model.UserInventory{
+			UserID:    orderInfo.PayerID,
+			ProductID: item.ProductID,
+			Quantity:  item.Quantity,
+		})
+		if err != nil {
+			return fmt.Errorf("update user inventory: %w", err)
+		}
+	}
+
+	return nil
 }

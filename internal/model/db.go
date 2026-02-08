@@ -24,7 +24,7 @@ type OrderItem struct {
 	// FK → order.order_id
 	OrderID string `gorm:"size:64;index;not null"`
 	// FK → product.id
-	ProductID string `gorm:"size:64;index;not null"`
+	ProductID string `gorm:"index;not null"`
 	Quantity  int32  `gorm:"not null"`
 	UnitPrice int32  `gorm:"not null"`
 	Currency  string `gorm:"size:8;not null"`
@@ -48,4 +48,12 @@ type WebhookEvent struct {
 	EventType   string `gorm:"size:64;index"`
 	ProcessedAt time.Time
 	CreatedAt   time.Time
+}
+
+type UserInventory struct {
+	UserID    string `gorm:"primaryKey;size:32;"`
+	ProductID string `gorm:"primaryKey;index;not null"`
+	Quantity  int32  `gorm:"not null"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }

@@ -11,9 +11,10 @@ type OrderRepository interface {
 	Create(order *model.Order) error
 	FindByOrderID(orderID string) (*model.Order, error)
 	MarkCompleted(orderID string, payerID string) error
-	MarkPaid(orderID string) error
+	MarkPaid(orderID string) (*model.Order, error)
 	IsPaid(orderID string) (bool, error)
 	CreateOrderItems(items []*model.OrderItem) error
+	GetOrderItems(orderID string) ([]*model.OrderItem, error)
 }
 
 type orderRepoImpl struct {
@@ -60,13 +61,29 @@ func (r *orderRepoImpl) MarkCompleted(orderID string, payerID string) error {
 		}).Error
 }
 
-func (r *orderRepoImpl) MarkPaid(orderID string) error {
-	return r.db.Model(&model.Order{}).
-		Where(`order_id = ? AND status = ?`, orderID, "COMPLETED").
-		Updates(map[string]interface{}{
-			"status":     "PAID",
-			"updated_at": time.Now(),
-		}).Error
+func (r *orderRepoImpl) MarkPaid(orderID string) (*model.Order, error) {
+	var order model.Order
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		// Update the record
+		result := tx.Model(&order).
+			Where("order_id = ? AND status = ?", orderID, "COMPLETED").
+			Updates(map[string]interface{}{
+				"status":     "PAID",
+				"updated_at": time.Now(),
+			})
+
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+
+		// Fetch the updated record within the same transaction
+		return tx.Where("order_id = ?", orderID).First(&order).Error
+	})
+
+	return &order, err
 }
 
 func (r *orderRepoImpl) IsPaid(orderID string) (bool, error) {
@@ -81,4 +98,16 @@ func (r *orderRepoImpl) IsPaid(orderID string) (bool, error) {
 
 func (r *orderRepoImpl) CreateOrderItems(items []*model.OrderItem) error {
 	return r.db.Create(&items).Error
+}
+
+func (r *orderRepoImpl) GetOrderItems(orderID string) ([]*model.OrderItem, error) {
+	var items []*model.OrderItem
+	err := r.db.Where("order_id = ?", orderID).
+		Find(&items).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return items, nil
 }

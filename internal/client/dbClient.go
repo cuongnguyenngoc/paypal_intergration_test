@@ -32,6 +32,7 @@ func InitMysqlClient(databaseURL string) *gorm.DB {
 		&model.OrderItem{},
 		&model.Subscription{},
 		&model.WebhookEvent{},
+		&model.UserInventory{},
 	); err != nil {
 		log.Fatal(err)
 	}
