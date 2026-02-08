@@ -11,9 +11,10 @@ import (
 type Server struct {
 	echo          *echo.Echo
 	paypalHandler *handler.PaypalHandler
+	userHandler   *handler.UserHandler
 }
 
-func NewServer(paypalService service.PaypalService) *Server {
+func NewServer(paypalService service.PaypalService, userService service.UserService) *Server {
 	e := echo.New()
 
 	e.File("/", "../../web/index.html")
@@ -23,10 +24,12 @@ func NewServer(paypalService service.PaypalService) *Server {
 	e.Use(middleware.CORS())
 
 	paypalHandler := handler.NewPaypalHandler(paypalService)
+	userHandler := handler.NewUserHandler(userService)
 
 	s := &Server{
 		echo:          e,
 		paypalHandler: paypalHandler,
+		userHandler:   userHandler,
 	}
 
 	s.setupRoutes()
@@ -41,6 +44,8 @@ func (s *Server) setupRoutes() {
 			"status": "ok",
 		})
 	})
+
+	api.GET("/inventories", s.userHandler.GetUsersInventory)
 
 	paypal := api.Group("/paypal")
 

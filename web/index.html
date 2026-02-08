@@ -1,21 +1,70 @@
+<!-- Inventory Display Area -->
+<div id="inventory-section" style="margin-bottom: 20px;">
+  <h3>All users Inventory</h3>
+  <ul id="inventory-list">Loading inventory...</ul>
+</div>
+
 <button onclick="pay()">Pay Now</button>
 
 <script>
+async function loadInventory() {
+  const list = document.getElementById("inventory-list");
+  try {
+    const res = await fetch("/api/inventories");
+    const data = await res.json();
+    console.log("data", data)
+
+    if (!data || data.length === 0) {
+      list.innerHTML = "<li>No items owned yet.</li>";
+      return;
+    }
+
+    const grouped = data.reduce((acc, item) => {
+      const uid = item.UserID;
+      if (!acc[uid]) acc[uid] = [];
+      acc[uid].push(item);
+      return acc;
+    }, {});
+
+    // Clear loading text and map items to list elements
+    list.innerHTML = Object.keys(grouped).map(userId => `
+      <li style="margin-bottom: 15px; list-style: none;">
+        <div style="background: #f4f4f4; padding: 5px 10px; border-radius: 4px;">
+           <strong>👤 User: ${userId}</strong>
+        </div>
+        <ul style="margin-top: 5px;">
+          ${grouped[userId].map(item => `
+            <li>
+              ${item.ProductID || item.product_id}: 
+              <strong>x${item.Quantity || item.quantity}</strong>
+            </li>
+          `).join("")}
+        </ul>
+      </li>
+    `).join("");
+  } catch (err) {
+    list.innerHTML = "<li>Error loading inventory.</li>";
+    console.error(err);
+  }
+}
+
 async function pay() {
   const res = await fetch("/api/paypal/pay", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email: "cuong94@gmail.com",
-      items: [
-        { sku: "coin_100", quantity: 1 }
-      ],
+      items: [{ sku: "coin_100", quantity: 1 }],
       vault: true
     })
-  })
+  });
 
   const data = await res.json();
-  console.log("data", data)
-  window.location.href = data.order_approval_url
+  if (data.order_approval_url) {
+    window.location.href = data.order_approval_url;
+  }
 }
+
+// initial load inventory
+loadInventory();
 </script>

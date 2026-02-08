@@ -51,11 +51,12 @@ func main() {
 		webhookEventRepo,
 		inventoryRepo,
 	)
+	userService := service.NewUserService(inventoryRepo)
 
 	serverAddr := cfg.HTTP.Host + ":" + cfg.HTTP.Port
 
 	// Init HTTP server
-	srv := server.NewServer(paypalService)
+	srv := server.NewServer(paypalService, userService)
 
 	log.Println("Starting HTTP server on", serverAddr)
 	go func() {
