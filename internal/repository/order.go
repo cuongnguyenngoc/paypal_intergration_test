@@ -2,6 +2,7 @@ package repository
 
 import (
 	"paypal-integration-demo/internal/model"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -53,15 +54,19 @@ func (r *orderRepoImpl) MarkCompleted(orderID string, payerID string) error {
 			[]string{"CREATED", "APPROVED"},
 		).
 		Updates(map[string]interface{}{
-			"status":   "COMPLETED",
-			"payer_id": payerID,
+			"status":     "COMPLETED",
+			"payer_id":   payerID,
+			"updated_at": time.Now(),
 		}).Error
 }
 
 func (r *orderRepoImpl) MarkPaid(orderID string) error {
 	return r.db.Model(&model.Order{}).
 		Where(`order_id = ? AND status = ?`, orderID, "COMPLETED").
-		Update("status", "PAID").Error
+		Updates(map[string]interface{}{
+			"status":     "PAID",
+			"updated_at": time.Now(),
+		}).Error
 }
 
 func (r *orderRepoImpl) IsPaid(orderID string) (bool, error) {

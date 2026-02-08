@@ -12,6 +12,7 @@ import (
 type PaypalService interface {
 	Pay(ctx context.Context, email string, items []*dto.Item) (*dto.PayResponse, error)
 	CaptureOrder(ctx context.Context, orderID string) error
+	HandleWebhook(ctx context.Context, eventPayload *model.PayPalWebhookEvent) error
 }
 
 type paypalServiceImpl struct {
@@ -80,7 +81,7 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, email string, items []*dto.
 
 	err = s.orderRepo.Create(&model.Order{
 		OrderID:  resp.OrderID,
-		Status:   resp.Status,
+		Status:   "CREATED",
 		Amount:   totalAmount,
 		Currency: "USD",
 	})
@@ -106,4 +107,29 @@ func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) er
 	}
 
 	return s.orderRepo.MarkCompleted(orderID, resp.PayerID)
+}
+
+func (s *paypalServiceImpl) HandleWebhook(ctx context.Context, eventPayload *model.PayPalWebhookEvent) error {
+	switch eventPayload.EventType {
+	case "PAYMENT.CAPTURE.COMPLETED":
+		// mark order as paid
+		fmt.Println("payment completed")
+		return s.handleOrderPaid(ctx, eventPayload)
+	case "BILLING.SUBSCRIPTION.ACTIVATED":
+		// activate subscription
+		fmt.Println("subscription activated")
+	}
+
+	return nil
+}
+
+func (s *paypalServiceImpl) handleOrderPaid(ctx context.Context, eventPayload *model.PayPalWebhookEvent) error {
+	orderID := eventPayload.Resource.SupplementaryData.RelatedIDs.OrderID
+	if orderID == "" {
+		return fmt.Errorf("could not find order_id in webhook payload")
+	}
+
+	// todo: give item to user inventory
+
+	return s.orderRepo.MarkPaid(orderID)
 }

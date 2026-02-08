@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"paypal-integration-demo/internal/config"
+	"paypal-integration-demo/internal/model"
 	"time"
 )
 
@@ -22,23 +23,6 @@ type paypalClientImpl struct {
 	baseApiURL         string
 	paypalClientID     string
 	paypalClientSecret string
-}
-
-type PaypalLink struct {
-	Rel  string `json:"rel"`
-	Href string `json:"href"`
-}
-
-type Payer struct {
-	PayerID      string `json:"payer_id"`
-	EmailAddress string `json:"email_address"`
-}
-
-type PaypalResult struct {
-	ID     string       `json:"id"`
-	Links  []PaypalLink `json:"links"`
-	Status string       `json:"status"`
-	Payer  Payer        `json:"payer"`
 }
 
 type HandleOrderResponse struct {
@@ -130,7 +114,7 @@ func (c *paypalClientImpl) CreateOrder(ctx context.Context, serviceBaseUrl strin
 		return nil, fmt.Errorf("paypal error %d: %s", resp.StatusCode, string(b))
 	}
 
-	var result PaypalResult
+	var result model.PaypalResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decode paypal response: %w", err)
 	}
@@ -183,7 +167,7 @@ func (c *paypalClientImpl) CaptureOrder(ctx context.Context, orderID string) (*H
 		)
 	}
 
-	var result PaypalResult
+	var result model.PaypalResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decode paypal response: %w", err)
 	}
@@ -196,7 +180,7 @@ func (c *paypalClientImpl) CaptureOrder(ctx context.Context, orderID string) (*H
 	}, nil
 }
 
-func _extractApproveURL(links []PaypalLink) string {
+func _extractApproveURL(links []model.PaypalLink) string {
 	for _, link := range links {
 		if link.Rel == "approve" {
 			return link.Href

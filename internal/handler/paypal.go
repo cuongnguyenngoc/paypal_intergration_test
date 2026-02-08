@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"paypal-integration-demo/internal/dto"
+	"paypal-integration-demo/internal/model"
 	"paypal-integration-demo/internal/service"
 
 	"github.com/labstack/echo/v4"
@@ -55,20 +56,16 @@ func (h *PaypalHandler) HandleSuccess(c echo.Context) error {
 }
 
 func (h *PaypalHandler) PayPalWebhook(c echo.Context) error {
-	var payload map[string]interface{}
-	if err := c.Bind(&payload); err != nil {
-		return c.NoContent(http.StatusBadRequest)
+	ctx := c.Request().Context()
+
+	var event model.PayPalWebhookEvent
+	if err := c.Bind(&event); err != nil {
+		return fmt.Errorf("decode webhook event payload: %w", err)
 	}
 
-	eventType := payload["event_type"].(string)
-
-	switch eventType {
-	case "PAYMENT.CAPTURE.COMPLETED":
-		// mark order as paid
-		fmt.Println("payment completed")
-	case "BILLING.SUBSCRIPTION.ACTIVATED":
-		// activate subscription
-		fmt.Println("subscription activated")
+	err := h.paypalService.HandleWebhook(ctx, &event)
+	if err != nil {
+		return fmt.Errorf("handle webhook: %w", err)
 	}
 
 	return c.NoContent(http.StatusOK)

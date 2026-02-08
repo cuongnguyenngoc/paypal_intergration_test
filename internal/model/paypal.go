@@ -1,51 +1,64 @@
 package model
 
-import "time"
-
-type Product struct {
-	ID       string `gorm:"primaryKey;size:64;not null"` // product sku
-	Price    int32  `gorm:"not null"`
-	Currency string `gorm:"size:8;not null"`
-	Type     string `gorm:"size:32;index;not null"` // ONE_TIME, SUBSCRIPTION
+type Payer struct {
+	PayerID string `json:"payer_id"`
+	Email   string `json:"email_address"`
 }
 
-type Order struct {
-	OrderID   string `gorm:"primaryKey;size:64;not null"` // paypal order id
-	Status    string `gorm:"size:32;index;not null"`      // CREATED, APPROVED, PAID, FAILED
-	PayerID   string `gorm:"size:32;index"`               // buyer
-	Amount    int32  `gorm:"not null"`                    // total amount (sum of items)
-	Currency  string `gorm:"size:8;not null"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
+type PaypalLink struct {
+	Rel  string `json:"rel"`
+	Href string `json:"href"`
 }
 
-type OrderItem struct {
-	ID uint `gorm:"primaryKey"`
-	// FK → order.order_id
-	OrderID string `gorm:"size:64;index;not null"`
-	// FK → product.id
-	ProductID string `gorm:"size:64;index;not null"`
-	Quantity  int32  `gorm:"not null"`
-	UnitPrice int32  `gorm:"not null"`
-	Currency  string `gorm:"size:8;not null"`
-
-	CreatedAt time.Time
+type PaypalResult struct {
+	ID     string       `json:"id"`
+	Links  []PaypalLink `json:"links"`
+	Status string       `json:"status"`
+	Payer  Payer        `json:"payer"`
 }
 
-type Subscription struct {
-	SubscriptionID string `gorm:"primaryKey;size:64;uniqueIndex;not null"`
-	PlanID         string `gorm:"size:64"`
-	CustomerID     string `gorm:"size:64;index;not null"`
-	Status         string `gorm:"size:32;not null"` // CREATED, ACTIVE, CANCELLED
-	StartedAt      *time.Time
-	EndedAt        *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+type Amount struct {
+	Currency string `json:"currency_code"`
+	Value    string `json:"value"`
 }
 
-type WebhookEvent struct {
-	EventID     string `gorm:"primaryKey;size:128;uniqueIndex;not null"`
-	EventType   string `gorm:"size:64;index"`
-	ProcessedAt time.Time
-	CreatedAt   time.Time
+type Capture struct {
+	ID         string `json:"id"`
+	Status     string `json:"status"`
+	CreateTime string `json:"create_time"`
+	Final      bool   `json:"final_capture"`
+	Amount     Amount `json:"amount"`
+}
+
+type Payments struct {
+	Captures []Capture `json:"captures"`
+}
+
+type PurchaseUnit struct {
+	ReferenceID string   `json:"reference_id"`
+	Payments    Payments `json:"payments"`
+}
+
+type RelatedIDs struct {
+	OrderID string `json:"order_id"`
+}
+
+type SupplementaryData struct {
+	RelatedIDs RelatedIDs `json:"related_ids"`
+}
+
+type PaypalOrder struct {
+	ID                string            `json:"id"`
+	Intent            string            `json:"intent"`
+	Status            string            `json:"status"`
+	Payer             Payer             `json:"payer"`
+	PurchaseUnits     []PurchaseUnit    `json:"purchase_units"`
+	SupplementaryData SupplementaryData `json:"supplementary_data"`
+}
+
+type PayPalWebhookEvent struct {
+	ID         string      `json:"id"`
+	EventType  string      `json:"event_type"`
+	CreateTime string      `json:"create_time"`
+	Resource   PaypalOrder `json:"resource"`
 }
