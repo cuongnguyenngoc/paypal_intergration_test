@@ -1,3 +1,2 @@
 .env
-paypal-integration-demo
-./cmd/api/api
+cmd/api/api
