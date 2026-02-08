@@ -10,7 +10,7 @@ import (
 )
 
 type PaypalService interface {
-	Pay(ctx context.Context, email string, items []*dto.Item) (*client.CreateOrderResponse, error)
+	Pay(ctx context.Context, email string, items []*dto.Item) (*dto.PayResponse, error)
 	CaptureOrder(ctx context.Context, orderID string) error
 }
 
@@ -19,7 +19,6 @@ type paypalServiceImpl struct {
 	serviceBaseUrl   string
 	productRepo      repository.ProductRepository
 	orderRepo        repository.OrderRepository
-	captureRepo      repository.CaptureRepository
 	webhookEventRepo repository.WebhookEventRepository
 }
 
@@ -28,7 +27,6 @@ func NewPaypalService(
 	serviceBaseUrl string,
 	productRepo repository.ProductRepository,
 	orderRepo repository.OrderRepository,
-	captureRepo repository.CaptureRepository,
 	webhookEventRepo repository.WebhookEventRepository,
 ) PaypalService {
 	return &paypalServiceImpl{
@@ -36,12 +34,11 @@ func NewPaypalService(
 		serviceBaseUrl:   serviceBaseUrl,
 		productRepo:      productRepo,
 		orderRepo:        orderRepo,
-		captureRepo:      captureRepo,
 		webhookEventRepo: webhookEventRepo,
 	}
 }
 
-func (s *paypalServiceImpl) Pay(ctx context.Context, email string, items []*dto.Item) (*client.CreateOrderResponse, error) {
+func (s *paypalServiceImpl) Pay(ctx context.Context, email string, items []*dto.Item) (*dto.PayResponse, error) {
 	productIDs := make([]string, len(items))
 	itemQuantityMap := make(map[string]int32)
 	for i, item := range items {
@@ -81,12 +78,11 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, email string, items []*dto.
 		}
 	}
 
-	err = s.orderRepo.Create(&model.Order{
+	err = s.orderRepo.CreateOrUpdate(&model.Order{
 		OrderID:  resp.OrderID,
-		Status:   "CREATED",
+		Status:   resp.Status,
 		Amount:   totalAmount,
 		Currency: "USD",
-		PayerID:  resp.PaypalAccount.AccountID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("store order in db: %w", err)
@@ -97,9 +93,21 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, email string, items []*dto.
 		return nil, fmt.Errorf("store order items in db: %w", err)
 	}
 
-	return resp, nil
+	return &dto.PayResponse{
+		OrderID:          resp.OrderID,
+		OrderApprovalURL: resp.ApproveURL,
+	}, nil
 }
 
 func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) error {
-	return s.paypalClient.CaptureOrder(ctx, orderID)
+	resp, err := s.paypalClient.CaptureOrder(ctx, orderID)
+	if err != nil {
+		return fmt.Errorf("paypal api capture order: %w", err)
+	}
+
+	return s.orderRepo.CreateOrUpdate(&model.Order{
+		OrderID: orderID,
+		Status:  resp.Status,
+		PayerID: resp.PayerID,
+	})
 }

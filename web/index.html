@@ -2,7 +2,7 @@
 
 <script>
 async function pay() {
-  const res = await fetch("/api/pay", {
+  const res = await fetch("/api/paypal/pay", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

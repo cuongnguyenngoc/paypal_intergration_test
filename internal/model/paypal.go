@@ -12,7 +12,7 @@ type Product struct {
 type Order struct {
 	OrderID   string `gorm:"primaryKey;size:64;not null"` // paypal order id
 	Status    string `gorm:"size:32;index;not null"`      // CREATED, APPROVED, PAID, FAILED
-	PayerID   string `gorm:"size:32;index;not null"`      // buyer
+	PayerID   string `gorm:"size:32;index"`               // buyer
 	Amount    int32  `gorm:"not null"`                    // total amount (sum of items)
 	Currency  string `gorm:"size:8;not null"`
 	CreatedAt time.Time
@@ -30,21 +30,6 @@ type OrderItem struct {
 	Currency  string `gorm:"size:8;not null"`
 
 	CreatedAt time.Time
-
-	Order   Order   `gorm:"foreignKey:OrderID;references:OrderID;constraint:OnDelete:CASCADE;"`
-	Product Product `gorm:"foreignKey:ProductID;references:ID;constraint:OnDelete:CASCADE;"`
-}
-
-type Capture struct {
-	CaptureID string `gorm:"primaryKey;size:64;uniqueIndex;not null"`
-	// FK → orders.order_id
-	OrderID   string `gorm:"size:64;index;not null"`
-	Amount    int32  `gorm:"not null"`
-	Currency  string `gorm:"size:8;not null"`
-	Status    string `gorm:"size:32"` // COMPLETED
-	CreatedAt time.Time
-
-	Order Order `gorm:"foreignKey:OrderID;references:OrderID;constraint:OnDelete:CASCADE;"`
 }
 
 type Subscription struct {

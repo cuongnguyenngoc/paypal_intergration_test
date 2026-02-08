@@ -21,7 +21,7 @@ import (
 
 func main() {
 	// load .env into os.Environ
-	if err := godotenv.Load(); err != nil {
+	if err := godotenv.Load("../../.env"); err != nil {
 		fmt.Println("No .env file found (ok in prod)")
 	}
 
@@ -41,14 +41,12 @@ func main() {
 	}
 
 	orderRepo := repository.NewOrderRepository(db)
-	captureRepo := repository.NewCaptureRepository(db)
 	webhookEventRepo := repository.NewWebhookEventRepository(db)
 
 	paypalService := service.NewPaypalService(
 		paypalClient, cfg.BaseURL,
 		productRepo,
 		orderRepo,
-		captureRepo,
 		webhookEventRepo,
 	)
 
@@ -60,7 +58,8 @@ func main() {
 	log.Println("Starting HTTP server on", serverAddr)
 	go func() {
 		if err := srv.Start(serverAddr); err != nil && err != http.ErrServerClosed {
-			log.Fatal("HTTP server error")
+			fmt.Println("err", err)
+			log.Fatal("HTTP server error", err)
 		}
 	}()
 

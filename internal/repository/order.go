@@ -4,12 +4,13 @@ import (
 	"paypal-integration-demo/internal/model"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type OrderRepository interface {
-	Create(order *model.Order) error
+	CreateOrUpdate(order *model.Order) error
 	FindByOrderID(orderID string) (*model.Order, error)
-	MarkPaid(orderID string) error
+	MarkStatus(orderID string, status string) error
 	IsPaid(orderID string) (bool, error)
 	CreateOrderItems(items []*model.OrderItem) error
 }
@@ -24,8 +25,21 @@ func NewOrderRepository(db *gorm.DB) OrderRepository {
 	}
 }
 
-func (r *orderRepoImpl) Create(order *model.Order) error {
-	return r.db.Create(order).Error
+func (r *orderRepoImpl) CreateOrUpdate(order *model.Order) error {
+	return r.db.Clauses(
+		clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "order_id"},
+			},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"status",
+				"payer_id",
+				"amount",
+				"currency",
+				"updated_at",
+			}),
+		},
+	).Create(order).Error
 }
 
 func (r *orderRepoImpl) FindByOrderID(orderID string) (*model.Order, error) {
@@ -41,10 +55,10 @@ func (r *orderRepoImpl) FindByOrderID(orderID string) (*model.Order, error) {
 	return &order, nil
 }
 
-func (r *orderRepoImpl) MarkPaid(orderID string) error {
+func (r *orderRepoImpl) MarkStatus(orderID string, status string) error {
 	return r.db.Model(&model.Order{}).
 		Where("order_id = ?", orderID).
-		Update("status", "PAID").Error
+		Update("status", status).Error
 }
 
 func (r *orderRepoImpl) IsPaid(orderID string) (bool, error) {

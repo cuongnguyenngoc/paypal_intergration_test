@@ -4,6 +4,7 @@ import (
 	"paypal-integration-demo/internal/model"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ProductRepository interface {
@@ -29,7 +30,7 @@ func (r *productRepoImpl) Seed() error {
 		{ID: "vip_monthly", Price: 999, Currency: "USD", Type: "SUBSCRIPTION"},
 	}
 
-	return r.db.Create(&products).Error
+	return r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&products).Error
 }
 
 func (r *productRepoImpl) FindByID(productID string) (*model.Product, error) {

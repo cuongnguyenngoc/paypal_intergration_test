@@ -19,21 +19,10 @@ func NewPaypalHandler(paypalService service.PaypalService) *PaypalHandler {
 	}
 }
 
-type PayRequest struct {
-	Email string      `json:"email"`
-	Items []*dto.Item `json:"items"`
-	Vault bool        `json:"vault"`
-}
-
-type PayResponse struct {
-	OrderID          string `json:"order_id"`
-	OrderApprovalURL string `json:"order_approval_url"`
-}
-
 func (h *PaypalHandler) Pay(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	var req PayRequest
+	var req dto.PayRequest
 	if err := c.Bind(&req); err != nil {
 		return err
 	}
@@ -43,10 +32,7 @@ func (h *PaypalHandler) Pay(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, &PayResponse{
-		OrderID:          result.OrderID,
-		OrderApprovalURL: result.ApproveURL,
-	})
+	return c.JSON(http.StatusOK, result)
 }
 
 func (h *PaypalHandler) HandleSuccess(c echo.Context) error {
@@ -56,6 +42,7 @@ func (h *PaypalHandler) HandleSuccess(c echo.Context) error {
 	if orderID == "" {
 		return c.String(400, "missing order token")
 	}
+	fmt.Println("orderID", orderID)
 
 	err := h.paypalService.CaptureOrder(ctx, orderID)
 	if err != nil {

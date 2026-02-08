@@ -13,8 +13,8 @@ import (
 )
 
 type PaypalClient interface {
-	CreateOrder(ctx context.Context, serviceBaseUrl string) (*CreateOrderResponse, error)
-	CaptureOrder(ctx context.Context, orderID string) error
+	CreateOrder(ctx context.Context, serviceBaseUrl string) (*HandleOrderResponse, error)
+	CaptureOrder(ctx context.Context, orderID string) (*HandleOrderResponse, error)
 }
 
 type paypalClientImpl struct {
@@ -29,26 +29,23 @@ type PaypalLink struct {
 	Href string `json:"href"`
 }
 
-type PaypalAccount struct {
-	AccountID    string `json:"account_id"`
+type Payer struct {
+	PayerID      string `json:"payer_id"`
 	EmailAddress string `json:"email_address"`
 }
 
-type PaymentSource struct {
-	PaypalAccount PaypalAccount `json:"paypal"`
+type PaypalResult struct {
+	ID     string       `json:"id"`
+	Links  []PaypalLink `json:"links"`
+	Status string       `json:"status"`
+	Payer  Payer        `json:"payer"`
 }
 
-type PaypalCreateOrderResult struct {
-	ID            string        `json:"id"`
-	Links         []PaypalLink  `json:"links"`
-	Status        string        `json:"status"`
-	PaymentSource PaymentSource `json:"payment_source"`
-}
-
-type CreateOrderResponse struct {
-	OrderID       string
-	ApproveURL    string
-	PaypalAccount PaypalAccount
+type HandleOrderResponse struct {
+	OrderID    string
+	ApproveURL string
+	Status     string
+	PayerID    string
 }
 
 func NewPaypalClient(paypalCfg *config.Paypal) PaypalClient {
@@ -89,7 +86,7 @@ func (c *paypalClientImpl) getAccessToken() (string, error) {
 	return res.AccessToken, nil
 }
 
-func (c *paypalClientImpl) CreateOrder(ctx context.Context, serviceBaseUrl string) (*CreateOrderResponse, error) {
+func (c *paypalClientImpl) CreateOrder(ctx context.Context, serviceBaseUrl string) (*HandleOrderResponse, error) {
 	accessToken, err := c.getAccessToken()
 	if err != nil {
 		return nil, fmt.Errorf("get paypal access token: %w", err)
@@ -133,24 +130,23 @@ func (c *paypalClientImpl) CreateOrder(ctx context.Context, serviceBaseUrl strin
 		return nil, fmt.Errorf("paypal error %d: %s", resp.StatusCode, string(b))
 	}
 
-	var result PaypalCreateOrderResult
+	var result PaypalResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decode paypal response: %w", err)
 	}
 
 	approveURL := _extractApproveURL(result.Links)
 
-	return &CreateOrderResponse{
-		OrderID:       result.ID,
-		ApproveURL:    approveURL,
-		PaypalAccount: result.PaymentSource.PaypalAccount,
+	return &HandleOrderResponse{
+		OrderID:    result.ID,
+		ApproveURL: approveURL,
 	}, nil
 }
 
-func (c *paypalClientImpl) CaptureOrder(ctx context.Context, orderID string) error {
+func (c *paypalClientImpl) CaptureOrder(ctx context.Context, orderID string) (*HandleOrderResponse, error) {
 	accessToken, err := c.getAccessToken()
 	if err != nil {
-		return fmt.Errorf("get paypal access token: %w", err)
+		return nil, fmt.Errorf("get paypal access token: %w", err)
 	}
 
 	url := fmt.Sprintf(
@@ -166,7 +162,7 @@ func (c *paypalClientImpl) CaptureOrder(ctx context.Context, orderID string) err
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("create capture request: %w", err)
+		return nil, fmt.Errorf("create capture request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
@@ -174,23 +170,30 @@ func (c *paypalClientImpl) CaptureOrder(ctx context.Context, orderID string) err
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("paypal capture request failed: %w", err)
+		return nil, fmt.Errorf("paypal capture request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
-
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf(
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf(
 			"paypal capture failed: status=%d body=%s",
 			resp.StatusCode,
-			string(body),
+			string(b),
 		)
 	}
 
-	// Optional: decode response if want details
-	// For now, success response means capture accepted
-	return nil
+	var result PaypalResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode paypal response: %w", err)
+	}
+	fmt.Println("result", result)
+
+	return &HandleOrderResponse{
+		OrderID: result.ID,
+		PayerID: result.Payer.PayerID,
+		Status:  result.Status,
+	}, nil
 }
 
 func _extractApproveURL(links []PaypalLink) string {

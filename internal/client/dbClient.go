@@ -29,7 +29,7 @@ func InitMysqlClient(databaseURL string) *gorm.DB {
 	if err := db.AutoMigrate(
 		&model.Product{},
 		&model.Order{},
-		&model.Capture{},
+		&model.OrderItem{},
 		&model.Subscription{},
 		&model.WebhookEvent{},
 	); err != nil {
