@@ -30,6 +30,7 @@ func InitMysqlClient(databaseURL string) *gorm.DB {
 		&model.Product{},
 		&model.Order{},
 		&model.OrderItem{},
+		&model.UserVault{},
 		&model.Subscription{},
 		&model.WebhookEvent{},
 		&model.UserInventory{},

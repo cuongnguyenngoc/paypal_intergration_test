@@ -14,7 +14,8 @@ import (
 )
 
 type PaypalClient interface {
-	CreateOrder(ctx context.Context, serviceBaseUrl string) (*HandleOrderResponse, error)
+	CreateOrderForApproval(ctx context.Context, serviceBaseUrl string) (*HandleOrderResponse, error)
+	CreateOrderWithVault(ctx context.Context, vaultID string) (string, error)
 	CaptureOrder(ctx context.Context, orderID string) (*HandleOrderResponse, error)
 	GetOrderDetails(ctx context.Context, orderID string) (*GetOrderResponse, error)
 	VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error
@@ -90,12 +91,7 @@ func (c *paypalClientImpl) getAccessToken() (string, error) {
 	return res.AccessToken, nil
 }
 
-func (c *paypalClientImpl) CreateOrder(ctx context.Context, serviceBaseUrl string) (*HandleOrderResponse, error) {
-	accessToken, err := c.getAccessToken()
-	if err != nil {
-		return nil, fmt.Errorf("get paypal access token: %w", err)
-	}
-
+func (c *paypalClientImpl) CreateOrderForApproval(ctx context.Context, serviceBaseUrl string) (*HandleOrderResponse, error) {
 	payload := map[string]interface{}{
 		"intent": "CAPTURE",
 		"purchase_units": []map[string]interface{}{
@@ -108,6 +104,12 @@ func (c *paypalClientImpl) CreateOrder(ctx context.Context, serviceBaseUrl strin
 		},
 		"payment_source": map[string]interface{}{
 			"paypal": map[string]interface{}{
+				"experience_context": map[string]interface{}{
+					"return_url":   fmt.Sprintf("%s/api/paypal/success", serviceBaseUrl),
+					"cancel_url":   fmt.Sprintf("%s", serviceBaseUrl),
+					"landing_page": "LOGIN",
+					"user_action":  "PAY_NOW",
+				},
 				"attributes": map[string]interface{}{
 					"vault": map[string]interface{}{
 						"store_in_vault": "ON_SUCCESS",
@@ -117,10 +119,51 @@ func (c *paypalClientImpl) CreateOrder(ctx context.Context, serviceBaseUrl strin
 				},
 			},
 		},
-		"application_context": map[string]string{
-			"return_url": fmt.Sprintf("%s/api/paypal/success", serviceBaseUrl),
-			"cancel_url": fmt.Sprintf("%s", serviceBaseUrl), // if user cancel during paypal payment, return to our homepage
+	}
+
+	result, err := c.createOrder(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	approveURL := _extractApproveURL(result.Links)
+
+	return &HandleOrderResponse{
+		OrderID:    result.ID,
+		ApproveURL: approveURL,
+	}, nil
+}
+
+func (c *paypalClientImpl) CreateOrderWithVault(ctx context.Context, vaultID string) (string, error) {
+	payload := map[string]interface{}{
+		"intent": "CAPTURE",
+		"purchase_units": []map[string]interface{}{
+			{
+				"amount": map[string]string{
+					"currency_code": "USD",
+					"value":         "100.00",
+				},
+			},
 		},
+		"payment_source": map[string]interface{}{
+			"paypal": map[string]string{
+				"vault_id": vaultID,
+			},
+		},
+	}
+
+	result, err := c.createOrder(payload)
+	if err != nil {
+		return "", err
+	}
+
+	return result.ID, nil
+}
+
+func (c *paypalClientImpl) createOrder(payload map[string]interface{}) (*model.PaypalResult, error) {
+	accessToken, err := c.getAccessToken()
+	if err != nil {
+		return nil, err
 	}
 
 	body, err := json.Marshal(payload)
@@ -150,12 +193,7 @@ func (c *paypalClientImpl) CreateOrder(ctx context.Context, serviceBaseUrl strin
 		return nil, fmt.Errorf("decode paypal response: %w", err)
 	}
 
-	approveURL := _extractApproveURL(result.Links)
-
-	return &HandleOrderResponse{
-		OrderID:    result.ID,
-		ApproveURL: approveURL,
-	}, nil
+	return &result, nil
 }
 
 func (c *paypalClientImpl) CaptureOrder(ctx context.Context, orderID string) (*HandleOrderResponse, error) {
@@ -299,7 +337,7 @@ func (c *paypalClientImpl) VerifyWebhookSignature(ctx context.Context, headers h
 
 func _extractApproveURL(links []model.PaypalLink) string {
 	for _, link := range links {
-		if link.Rel == "approve" {
+		if link.Rel == "approve" || link.Rel == "payer-action" {
 			return link.Href
 		}
 	}

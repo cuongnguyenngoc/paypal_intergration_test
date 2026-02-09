@@ -73,10 +73,11 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, items []*dto.Item) (*dto.Pa
 		return nil, fmt.Errorf("some products not found")
 	}
 
-	resp, err := s.paypalClient.CreateOrder(ctx, s.serviceBaseUrl)
+	resp, err := s.paypalClient.CreateOrderForApproval(ctx, s.serviceBaseUrl)
 	if err != nil {
 		return nil, fmt.Errorf("paypal api create order: %w", err)
 	}
+	fmt.Println("resp", resp)
 
 	totalAmount := int32(0)
 	orderItems := make([]*model.OrderItem, len(products))
@@ -142,7 +143,7 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 		return nil, fmt.Errorf("no vaulted payment method")
 	}
 
-	resp, err := s.paypalClient.CreateOrder(ctx, vaultID)
+	orderID, err := s.paypalClient.CreateOrderWithVault(ctx, vaultID)
 	if err != nil {
 		return nil, fmt.Errorf("paypal create order with vault: %w", err)
 	}
@@ -155,7 +156,7 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 		totalAmount += product.Price * qty
 
 		orderItems[i] = &model.OrderItem{
-			OrderID:   resp.OrderID,
+			OrderID:   orderID,
 			ProductID: product.ID,
 			Quantity:  qty,
 			UnitPrice: product.Price,
@@ -165,7 +166,7 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := s.orderRepo.Create(tx, &model.Order{
-			OrderID:  resp.OrderID,
+			OrderID:  orderID,
 			Status:   "CREATED",
 			Amount:   totalAmount,
 			Currency: "USD",
@@ -180,7 +181,7 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 		return nil
 	})
 
-	resp, err = s.paypalClient.CaptureOrder(ctx, resp.OrderID)
+	resp, err := s.paypalClient.CaptureOrder(ctx, orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +203,7 @@ func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) er
 	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		err = s.vaultRepo.Create(ctx, tx, &model.VaultedPaymentMethod{
+		err = s.vaultRepo.Create(ctx, tx, &model.UserVault{
 			UserID:   orderDetail.PaymentSource.PayPal.PayerID,
 			VaultID:  orderDetail.PaymentSource.PayPal.VaultID,
 			Provider: "paypal",

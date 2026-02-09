@@ -58,7 +58,7 @@ type UserInventory struct {
 	UpdatedAt time.Time
 }
 
-type VaultedPaymentMethod struct {
+type UserVault struct {
 	UserID   string `gorm:"primaryKey;not null"`
 	VaultID  string `gorm:"primaryKey;uniqueIndex;not null"`
 	Provider string
