@@ -38,7 +38,7 @@ func (h *PaypalHandler) Pay(c echo.Context) error {
 	return c.JSON(http.StatusOK, result)
 }
 
-func (h *PaypalHandler) Payagain(c echo.Context) error {
+func (h *PaypalHandler) PayAgain(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	var req dto.PayRequest
@@ -125,4 +125,17 @@ func (h *PaypalHandler) PayPalWebhook(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusOK)
+}
+
+func (h *PaypalHandler) CheckUserHaveSavedPayment(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	haveSaved, err := h.paypalService.CheckUserHaveSavedPayment(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("check user have saved payment: %w", err)
+	}
+
+	return c.JSON(http.StatusOK, map[string]bool{
+		"has_saved_payment": haveSaved,
+	})
 }

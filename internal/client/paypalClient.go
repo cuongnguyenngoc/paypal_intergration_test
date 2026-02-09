@@ -17,7 +17,6 @@ type PaypalClient interface {
 	CreateOrderForApproval(ctx context.Context, serviceBaseUrl string) (*HandleOrderResponse, error)
 	CreateOrderWithVault(ctx context.Context, vaultID string) (string, error)
 	CaptureOrder(ctx context.Context, orderID string) (*HandleOrderResponse, error)
-	GetOrderDetails(ctx context.Context, orderID string) (*GetOrderResponse, error)
 	VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error
 }
 
@@ -34,22 +33,6 @@ type HandleOrderResponse struct {
 	ApproveURL string
 	Status     string
 	PayerID    string
-}
-
-type PaymentSource struct {
-	PayPal *PayPalPaymentSource `json:"paypal"`
-}
-
-type PayPalPaymentSource struct {
-	VaultID string `json:"vault_id"`
-	PayerID string `json:"payer_id"`
-	Email   string `json:"email_address"`
-}
-
-type GetOrderResponse struct {
-	ID            string        `json:"id"`
-	Status        string        `json:"status"`
-	PaymentSource PaymentSource `json:"payment_source"`
 }
 
 func NewPaypalClient(paypalCfg *config.Paypal) PaypalClient {
@@ -246,43 +229,6 @@ func (c *paypalClientImpl) CaptureOrder(ctx context.Context, orderID string) (*H
 		PayerID: result.Payer.PayerID,
 		Status:  result.Status,
 	}, nil
-}
-
-func (c *paypalClientImpl) GetOrderDetails(ctx context.Context, orderID string) (*GetOrderResponse, error) {
-	accessToken, err := c.getAccessToken()
-	if err != nil {
-		return nil, fmt.Errorf("get paypal access token: %w", err)
-	}
-
-	url := fmt.Sprintf("%s/v2/checkout/orders/%s", c.baseApiURL, orderID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create get order request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("paypal capture request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		b, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("paypal get orders failed: status=%d body=%s",
-			resp.StatusCode,
-			string(b),
-		)
-	}
-
-	var result GetOrderResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode paypal get order response: %w", err)
-	}
-
-	return &result, nil
 }
 
 func (c *paypalClientImpl) VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error {

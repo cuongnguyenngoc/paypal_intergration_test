@@ -52,6 +52,8 @@ func (s *Server) setupRoutes() {
 	paypal.POST("/pay", s.paypalHandler.Pay)
 	paypal.GET("/success", s.paypalHandler.HandleSuccess)
 	paypal.POST("/webhook", s.paypalHandler.PayPalWebhook)
+	paypal.GET("/have-saved-payment", s.paypalHandler.CheckUserHaveSavedPayment)
+	paypal.POST("/pay-again", s.paypalHandler.PayAgain)
 }
 
 func (s *Server) Start(address string) error {

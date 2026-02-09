@@ -18,6 +18,7 @@ type PaypalService interface {
 	PayAgain(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error)
 	CaptureOrder(ctx context.Context, orderID string) error
 	HandleWebhook(ctx context.Context, headers http.Header, body []byte) error
+	CheckUserHaveSavedPayment(ctx context.Context, userID string) (bool, error)
 }
 
 type paypalServiceImpl struct {
@@ -196,23 +197,19 @@ func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) er
 		return fmt.Errorf("paypal api capture order: %w", err)
 	}
 
-	orderDetail, err := s.paypalClient.GetOrderDetails(ctx, orderID)
-	if err != nil {
-		return fmt.Errorf("paypal api get order: %w", err)
-	}
-
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		err = s.vaultRepo.Create(ctx, tx, &model.UserVault{
-			UserID:   orderDetail.PaymentSource.PayPal.PayerID,
-			VaultID:  orderDetail.PaymentSource.PayPal.VaultID,
-			Provider: "paypal",
-		})
-		if err != nil {
-			return fmt.Errorf("store user vault info to db: %w", err)
-		}
-
 		return s.orderRepo.MarkCompleted(tx, orderID, resp.PayerID)
 	})
+}
+
+func (s *paypalServiceImpl) CheckUserHaveSavedPayment(ctx context.Context, userID string) (bool, error) {
+	vaultID, err := s.vaultRepo.GetVaultID(ctx, userID)
+	if err != nil {
+		return false, fmt.Errorf("no vaulted payment method")
+	}
+	fmt.Println("vaultID", vaultID)
+
+	return vaultID != "", nil
 }
 
 func (s *paypalServiceImpl) HandleWebhook(ctx context.Context, headers http.Header, body []byte) error {
@@ -225,12 +222,16 @@ func (s *paypalServiceImpl) HandleWebhook(ctx context.Context, headers http.Head
 	if err := json.Unmarshal(body, &eventPayload); err != nil {
 		return fmt.Errorf("decode webhook payload: %w", err)
 	}
+	fmt.Println("eventPayload", eventPayload)
+	fmt.Println("eventPayload.EventType", eventPayload.EventType)
 
 	switch eventPayload.EventType {
 	case "PAYMENT.CAPTURE.COMPLETED":
 		// mark order as paid
 		fmt.Println("payment completed")
 		return s.handleOrderPaid(ctx, &eventPayload)
+	case "VAULT.PAYMENT-TOKEN.CREATED":
+		return s.handlePaymentTokenCreated(ctx, &eventPayload)
 	case "BILLING.SUBSCRIPTION.ACTIVATED":
 		// activate subscription
 		fmt.Println("subscription activated")
@@ -270,4 +271,30 @@ func (s *paypalServiceImpl) handleOrderPaid(ctx context.Context, eventPayload *m
 
 		return nil
 	})
+}
+
+func (s *paypalServiceImpl) handlePaymentTokenCreated(ctx context.Context, event *model.PayPalWebhookEvent) error {
+	resource := event.Resource
+	fmt.Println("resource", resource)
+	if resource.ID == "" {
+		return fmt.Errorf("missing vault_id in PAYMENT.TOKEN.CREATED")
+	}
+
+	userID := event.Resource.PaymentResource.PayPal.PayerID
+	if userID == "" {
+		return fmt.Errorf("missing payer_id in PAYMENT.TOKEN.CREATED")
+	}
+
+	fmt.Println("userID", userID)
+
+	// Upsert user vault info
+	err := s.vaultRepo.Create(ctx, &model.UserVault{
+		UserID:  userID,
+		VaultID: resource.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("save user paypal vault: %w", err)
+	}
+
+	return nil
 }

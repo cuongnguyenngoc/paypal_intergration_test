@@ -5,6 +5,9 @@
 </div>
 
 <button onclick="pay()">Pay Now</button>
+<button id="pay-again-btn" onclick="payAgain()" style="display:none;">
+  Pay Again (Saved Payment)
+</button>
 
 <script>
 async function loadInventory() {
@@ -47,6 +50,20 @@ async function loadInventory() {
   }
 }
 
+async function checkSavedPayment() {
+  try {
+    const res = await fetch("/api/paypal/have-saved-payment");
+    if (!res.ok) return;
+
+    const data = await res.json();
+    console.log("data", data)
+    if (data.has_saved_payment) {
+      document.getElementById("pay-again-btn").style.display = "inline-block";
+    }
+  } catch (err) {
+    console.error("failed to check saved payment", err);
+  }
+}
 async function pay() {
   const res = await fetch("/api/paypal/pay", {
     method: "POST",
@@ -62,6 +79,25 @@ async function pay() {
   }
 }
 
+async function payAgain() {
+  const res = await fetch("/api/paypal/pay-again", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      items: [{ sku: "coin_100", quantity: 1 }],
+    })
+  });
+
+  if (!res.ok) {
+    alert("Saved payment failed, falling back to Pay Now");
+    return pay();
+  }
+
+  alert("Payment successful 🎉");
+  loadInventory();
+}
+
 // initial load inventory
 loadInventory();
+checkSavedPayment();
 </script>

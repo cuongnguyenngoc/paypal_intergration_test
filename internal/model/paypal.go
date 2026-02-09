@@ -47,18 +47,23 @@ type SupplementaryData struct {
 	RelatedIDs RelatedIDs `json:"related_ids"`
 }
 
-type PaypalOrder struct {
+type PaymentSource struct {
+	PayPal Payer `json:"paypal"`
+}
+
+type PaypalResource struct {
 	ID                string            `json:"id"`
 	Intent            string            `json:"intent"`
 	Status            string            `json:"status"`
 	Payer             Payer             `json:"payer"`
 	PurchaseUnits     []PurchaseUnit    `json:"purchase_units"`
 	SupplementaryData SupplementaryData `json:"supplementary_data"`
+	PaymentResource   PaymentSource     `json:"payment_source"`
 }
 
 type PayPalWebhookEvent struct {
-	ID         string      `json:"id"`
-	EventType  string      `json:"event_type"`
-	CreateTime string      `json:"create_time"`
-	Resource   PaypalOrder `json:"resource"`
+	ID         string         `json:"id"`
+	EventType  string         `json:"event_type"`
+	CreateTime string         `json:"create_time"`
+	Resource   PaypalResource `json:"resource"`
 }
