@@ -12,7 +12,6 @@ async function loadInventory() {
   try {
     const res = await fetch("/api/inventories");
     const data = await res.json();
-    console.log("data", data)
 
     if (!data || data.length === 0) {
       list.innerHTML = "<li>No items owned yet.</li>";
@@ -58,7 +57,6 @@ async function pay() {
   });
 
   const data = await res.json();
-  console.log("data pay", data)
   if (data.order_approval_url) {
     window.location.href = data.order_approval_url;
   }
