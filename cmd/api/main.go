@@ -46,6 +46,7 @@ func main() {
 	vaultRepo := repository.NewVaultRepository(db)
 
 	paypalService := service.NewPaypalService(
+		db,
 		paypalClient, cfg.BaseURL,
 		productRepo,
 		orderRepo,

@@ -163,18 +163,22 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 		}
 	}
 
-	if err := s.orderRepo.Create(&model.Order{
-		OrderID:  resp.OrderID,
-		Status:   "CREATED",
-		Amount:   totalAmount,
-		Currency: "USD",
-	}); err != nil {
-		return nil, err
-	}
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.orderRepo.Create(tx, &model.Order{
+			OrderID:  resp.OrderID,
+			Status:   "CREATED",
+			Amount:   totalAmount,
+			Currency: "USD",
+		}); err != nil {
+			return err
+		}
 
-	if err := s.orderRepo.CreateOrderItems(orderItems); err != nil {
-		return nil, err
-	}
+		if err := s.orderRepo.CreateOrderItems(tx, orderItems); err != nil {
+			return err
+		}
+
+		return nil
+	})
 
 	resp, err = s.paypalClient.CaptureOrder(ctx, resp.OrderID)
 	if err != nil {
