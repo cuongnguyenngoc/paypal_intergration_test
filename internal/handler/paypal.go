@@ -28,7 +28,7 @@ func (h *PaypalHandler) Pay(c echo.Context) error {
 		return err
 	}
 
-	result, err := h.paypalService.Pay(ctx, req.Email, req.Items)
+	result, err := h.paypalService.Pay(ctx, req.Items)
 	if err != nil {
 		return err
 	}

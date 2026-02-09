@@ -10,7 +10,7 @@ import (
 )
 
 type PaypalService interface {
-	Pay(ctx context.Context, email string, items []*dto.Item) (*dto.PayResponse, error)
+	Pay(ctx context.Context, items []*dto.Item) (*dto.PayResponse, error)
 	CaptureOrder(ctx context.Context, orderID string) error
 	HandleWebhook(ctx context.Context, eventPayload *model.PayPalWebhookEvent) error
 }
@@ -45,7 +45,7 @@ func NewPaypalService(
 	}
 }
 
-func (s *paypalServiceImpl) Pay(ctx context.Context, email string, items []*dto.Item) (*dto.PayResponse, error) {
+func (s *paypalServiceImpl) Pay(ctx context.Context, items []*dto.Item) (*dto.PayResponse, error) {
 	productIDs := make([]string, len(items))
 	itemQuantityMap := make(map[string]int32)
 	for i, item := range items {
