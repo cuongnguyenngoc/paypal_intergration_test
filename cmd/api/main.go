@@ -43,6 +43,7 @@ func main() {
 	orderRepo := repository.NewOrderRepository(db)
 	webhookEventRepo := repository.NewWebhookEventRepository(db)
 	inventoryRepo := repository.NewInventoryRepository(db)
+	vaultRepo := repository.NewVaultRepository(db)
 
 	paypalService := service.NewPaypalService(
 		paypalClient, cfg.BaseURL,
@@ -50,6 +51,7 @@ func main() {
 		orderRepo,
 		webhookEventRepo,
 		inventoryRepo,
+		vaultRepo,
 	)
 	userService := service.NewUserService(inventoryRepo)
 

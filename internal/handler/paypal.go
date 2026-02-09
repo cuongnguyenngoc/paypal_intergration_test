@@ -43,7 +43,6 @@ func (h *PaypalHandler) HandleSuccess(c echo.Context) error {
 	if orderID == "" {
 		return c.String(400, "missing order token")
 	}
-	fmt.Println("orderID", orderID)
 
 	err := h.paypalService.CaptureOrder(ctx, orderID)
 	if err != nil {

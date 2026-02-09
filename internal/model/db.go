@@ -57,3 +57,13 @@ type UserInventory struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
+
+type VaultedPaymentMethod struct {
+	UserID   string `gorm:"primaryKey;not null"`
+	VaultID  string `gorm:"primaryKey;uniqueIndex;not null"`
+	Provider string
+
+	// IsActive  bool `gorm:"not null;default:true"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}

@@ -22,6 +22,7 @@ type paypalServiceImpl struct {
 	orderRepo        repository.OrderRepository
 	webhookEventRepo repository.WebhookEventRepository
 	inventoryRepo    repository.InventoryRepository
+	vaultRepo        repository.VaultRepository
 }
 
 func NewPaypalService(
@@ -31,6 +32,7 @@ func NewPaypalService(
 	orderRepo repository.OrderRepository,
 	webhookEventRepo repository.WebhookEventRepository,
 	inventoryRepo repository.InventoryRepository,
+	vaultRepo repository.VaultRepository,
 ) PaypalService {
 	return &paypalServiceImpl{
 		paypalClient:     paypalClient,
@@ -39,6 +41,7 @@ func NewPaypalService(
 		orderRepo:        orderRepo,
 		webhookEventRepo: webhookEventRepo,
 		inventoryRepo:    inventoryRepo,
+		vaultRepo:        vaultRepo,
 	}
 }
 
@@ -107,6 +110,20 @@ func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) er
 	resp, err := s.paypalClient.CaptureOrder(ctx, orderID)
 	if err != nil {
 		return fmt.Errorf("paypal api capture order: %w", err)
+	}
+
+	orderDetail, err := s.paypalClient.GetOrderDetails(ctx, orderID)
+	if err != nil {
+		return fmt.Errorf("paypal api get order: %w", err)
+	}
+
+	err = s.vaultRepo.Create(ctx, &model.VaultedPaymentMethod{
+		UserID:   orderDetail.PaymentSource.PayPal.PayerID,
+		VaultID:  orderDetail.PaymentSource.PayPal.VaultID,
+		Provider: "paypal",
+	})
+	if err != nil {
+		return fmt.Errorf("store user vault info to db: %w", err)
 	}
 
 	return s.orderRepo.MarkCompleted(orderID, resp.PayerID)
