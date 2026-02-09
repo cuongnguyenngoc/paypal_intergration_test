@@ -10,7 +10,7 @@ import (
 )
 
 type InventoryRepository interface {
-	Upsert(ctx context.Context, inventory *model.UserInventory) error
+	Upsert(ctx context.Context, tx *gorm.DB, inventory *model.UserInventory) error
 	Get(ctx context.Context) ([]*model.UserInventory, error)
 }
 
@@ -24,8 +24,8 @@ func NewInventoryRepository(db *gorm.DB) InventoryRepository {
 	}
 }
 
-func (r *inventoryRepoImpl) Upsert(ctx context.Context, inventory *model.UserInventory) error {
-	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+func (r *inventoryRepoImpl) Upsert(ctx context.Context, tx *gorm.DB, inventory *model.UserInventory) error {
+	return tx.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "product_id"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"quantity":   gorm.Expr("user_inventories.quantity + ?", inventory.Quantity),

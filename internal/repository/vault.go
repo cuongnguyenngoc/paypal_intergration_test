@@ -12,7 +12,7 @@ import (
 )
 
 type VaultRepository interface {
-	Create(ctx context.Context, vault *model.VaultedPaymentMethod) error
+	Create(ctx context.Context, tx *gorm.DB, vault *model.VaultedPaymentMethod) error
 	GetVaultID(ctx context.Context, userID string) (string, error)
 }
 
@@ -26,7 +26,7 @@ func NewVaultRepository(db *gorm.DB) VaultRepository {
 	}
 }
 
-func (r *vaultRepoImpl) Create(ctx context.Context, vault *model.VaultedPaymentMethod) error {
+func (r *vaultRepoImpl) Create(ctx context.Context, tx *gorm.DB, vault *model.VaultedPaymentMethod) error {
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "vault_id"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{

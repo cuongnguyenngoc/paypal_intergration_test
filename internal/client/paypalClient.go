@@ -17,6 +17,7 @@ type PaypalClient interface {
 	CreateOrder(ctx context.Context, serviceBaseUrl string) (*HandleOrderResponse, error)
 	CaptureOrder(ctx context.Context, orderID string) (*HandleOrderResponse, error)
 	GetOrderDetails(ctx context.Context, orderID string) (*GetOrderResponse, error)
+	VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error
 }
 
 type paypalClientImpl struct {
@@ -24,6 +25,7 @@ type paypalClientImpl struct {
 	baseApiURL         string
 	paypalClientID     string
 	paypalClientSecret string
+	paypalWebhookID    string
 }
 
 type HandleOrderResponse struct {
@@ -57,6 +59,7 @@ func NewPaypalClient(paypalCfg *config.Paypal) PaypalClient {
 		baseApiURL:         paypalCfg.BaseApiURL,
 		paypalClientID:     paypalCfg.ClientID,
 		paypalClientSecret: paypalCfg.ClientSecret,
+		paypalWebhookID:    paypalCfg.WebhookID,
 	}
 }
 
@@ -243,6 +246,55 @@ func (c *paypalClientImpl) GetOrderDetails(ctx context.Context, orderID string) 
 	}
 
 	return &result, nil
+}
+
+func (c *paypalClientImpl) VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error {
+	accessToken, err := c.getAccessToken()
+	if err != nil {
+		return err
+	}
+
+	payload := map[string]interface{}{
+		"auth_algo":         headers.Get("PayPal-Auth-Algo"),
+		"cert_url":          headers.Get("PayPal-Cert-Url"),
+		"transmission_id":   headers.Get("PayPal-Transmission-Id"),
+		"transmission_sig":  headers.Get("PayPal-Transmission-Sig"),
+		"transmission_time": headers.Get("PayPal-Transmission-Time"),
+		"webhook_id":        c.paypalWebhookID,
+		"webhook_event":     json.RawMessage(body),
+	}
+
+	data, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		c.baseApiURL+"/v1/notifications/verify-webhook-signature",
+		bytes.NewBuffer(data),
+	)
+
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var res struct {
+		VerificationStatus string `json:"verification_status"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return err
+	}
+
+	if res.VerificationStatus != "SUCCESS" {
+		return fmt.Errorf("invalid paypal webhook signature")
+	}
+
+	return nil
 }
 
 func _extractApproveURL(links []model.PaypalLink) string {
