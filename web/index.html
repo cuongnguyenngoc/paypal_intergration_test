@@ -53,9 +53,7 @@ async function pay() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      email: "cuong94@gmail.com",
       items: [{ sku: "coin_100", quantity: 1 }],
-      vault: true
     })
   });
 
