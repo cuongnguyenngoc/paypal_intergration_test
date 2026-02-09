@@ -87,7 +87,7 @@ func (h *PaypalHandler) HandleSuccess(c echo.Context) error {
 	</head>
 	<body>
 		<h2>Payment approved</h2>
-		<p>We are processing your payment.</p>
+		<p>We are processing your payment and grant items to you if success</p>
 		<p>Redirecting to homepage in <span class="countdown" id="countdown">15</span> seconds…</p>
 
 		<script>
