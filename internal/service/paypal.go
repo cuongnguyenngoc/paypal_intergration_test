@@ -74,11 +74,6 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, items []*dto.Item) (*dto.Pa
 		return nil, fmt.Errorf("some products not found")
 	}
 
-	resp, err := s.paypalClient.CreateOrderForApproval(ctx, s.serviceBaseUrl)
-	if err != nil {
-		return nil, fmt.Errorf("paypal api create order: %w", err)
-	}
-
 	totalAmount := int32(0)
 	orderItems := make([]*model.OrderItem, len(products))
 	for i, product := range products {
@@ -86,12 +81,20 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, items []*dto.Item) (*dto.Pa
 		totalAmount += product.Price * quantity
 
 		orderItems[i] = &model.OrderItem{
-			OrderID:   resp.OrderID,
 			ProductID: product.ID,
 			Quantity:  quantity,
 			UnitPrice: product.Price,
 			Currency:  product.Currency,
 		}
+	}
+
+	resp, err := s.paypalClient.CreateOrderForApproval(ctx, s.serviceBaseUrl, "USD", totalAmount)
+	if err != nil {
+		return nil, fmt.Errorf("paypal api create order: %w", err)
+	}
+
+	for _, orderItem := range orderItems {
+		orderItem.OrderID = resp.OrderID
 	}
 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -143,25 +146,27 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 		return nil, fmt.Errorf("no vaulted payment method")
 	}
 
-	orderID, err := s.paypalClient.CreateOrderWithVault(ctx, vaultID)
-	if err != nil {
-		return nil, fmt.Errorf("paypal create order with vault: %w", err)
-	}
-
 	totalAmount := int32(0)
 	orderItems := make([]*model.OrderItem, len(products))
-
 	for i, product := range products {
 		qty := itemQuantityMap[product.ID]
 		totalAmount += product.Price * qty
 
 		orderItems[i] = &model.OrderItem{
-			OrderID:   orderID,
 			ProductID: product.ID,
 			Quantity:  qty,
 			UnitPrice: product.Price,
 			Currency:  product.Currency,
 		}
+	}
+
+	orderID, err := s.paypalClient.CreateOrderWithVault(ctx, vaultID, "USD", totalAmount)
+	if err != nil {
+		return nil, fmt.Errorf("paypal create order with vault: %w", err)
+	}
+
+	for _, orderItem := range orderItems {
+		orderItem.OrderID = orderID
 	}
 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
