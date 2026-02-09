@@ -8,13 +8,13 @@ import (
 )
 
 type OrderRepository interface {
-	Create(order *model.Order) error
+	Create(tx *gorm.DB, order *model.Order) error
 	FindByOrderID(orderID string) (*model.Order, error)
-	MarkCompleted(orderID string, payerID string) error
-	MarkPaid(orderID string) (*model.Order, error)
+	MarkCompleted(tx *gorm.DB, orderID string, payerID string) error
+	MarkPaid(tx *gorm.DB, orderID string) (*model.Order, error)
 	IsPaid(orderID string) (bool, error)
-	CreateOrderItems(items []*model.OrderItem) error
-	GetOrderItems(orderID string) ([]*model.OrderItem, error)
+	CreateOrderItems(tx *gorm.DB, items []*model.OrderItem) error
+	GetOrderItems(tx *gorm.DB, orderID string) ([]*model.OrderItem, error)
 }
 
 type orderRepoImpl struct {
@@ -27,8 +27,8 @@ func NewOrderRepository(db *gorm.DB) OrderRepository {
 	}
 }
 
-func (r *orderRepoImpl) Create(order *model.Order) error {
-	return r.db.Create(order).Error
+func (r *orderRepoImpl) Create(tx *gorm.DB, order *model.Order) error {
+	return tx.Create(order).Error
 }
 
 func (r *orderRepoImpl) FindByOrderID(orderID string) (*model.Order, error) {
@@ -44,8 +44,8 @@ func (r *orderRepoImpl) FindByOrderID(orderID string) (*model.Order, error) {
 	return &order, nil
 }
 
-func (r *orderRepoImpl) MarkCompleted(orderID string, payerID string) error {
-	return r.db.Model(&model.Order{}).
+func (r *orderRepoImpl) MarkCompleted(tx *gorm.DB, orderID string, payerID string) error {
+	return tx.Model(&model.Order{}).
 		Where(`
 			order_id = ?
 			AND status IN ?
@@ -61,9 +61,9 @@ func (r *orderRepoImpl) MarkCompleted(orderID string, payerID string) error {
 		}).Error
 }
 
-func (r *orderRepoImpl) MarkPaid(orderID string) (*model.Order, error) {
+func (r *orderRepoImpl) MarkPaid(tx *gorm.DB, orderID string) (*model.Order, error) {
 	var order model.Order
-	err := r.db.Transaction(func(tx *gorm.DB) error {
+	err := tx.Transaction(func(tx *gorm.DB) error {
 		// Update the record
 		result := tx.Model(&order).
 			Where("order_id = ? AND status = ?", orderID, "COMPLETED").
@@ -96,13 +96,13 @@ func (r *orderRepoImpl) IsPaid(orderID string) (bool, error) {
 	return count > 0, err
 }
 
-func (r *orderRepoImpl) CreateOrderItems(items []*model.OrderItem) error {
-	return r.db.Create(&items).Error
+func (r *orderRepoImpl) CreateOrderItems(tx *gorm.DB, items []*model.OrderItem) error {
+	return tx.Create(&items).Error
 }
 
-func (r *orderRepoImpl) GetOrderItems(orderID string) ([]*model.OrderItem, error) {
+func (r *orderRepoImpl) GetOrderItems(tx *gorm.DB, orderID string) ([]*model.OrderItem, error) {
 	var items []*model.OrderItem
-	err := r.db.Where("order_id = ?", orderID).
+	err := tx.Where("order_id = ?", orderID).
 		Find(&items).Error
 
 	if err != nil {

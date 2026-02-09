@@ -8,6 +8,8 @@ import (
 	"paypal-integration-demo/internal/dto"
 	"paypal-integration-demo/internal/model"
 	"paypal-integration-demo/internal/repository"
+
+	"gorm.io/gorm"
 )
 
 type PaypalService interface {
@@ -18,6 +20,7 @@ type PaypalService interface {
 }
 
 type paypalServiceImpl struct {
+	db               *gorm.DB
 	paypalClient     client.PaypalClient
 	serviceBaseUrl   string
 	productRepo      repository.ProductRepository
@@ -28,6 +31,7 @@ type paypalServiceImpl struct {
 }
 
 func NewPaypalService(
+	db *gorm.DB,
 	paypalClient client.PaypalClient,
 	serviceBaseUrl string,
 	productRepo repository.ProductRepository,
@@ -37,6 +41,7 @@ func NewPaypalService(
 	vaultRepo repository.VaultRepository,
 ) PaypalService {
 	return &paypalServiceImpl{
+		db:               db,
 		paypalClient:     paypalClient,
 		serviceBaseUrl:   serviceBaseUrl,
 		productRepo:      productRepo,
@@ -87,20 +92,23 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, items []*dto.Item) (*dto.Pa
 		}
 	}
 
-	err = s.orderRepo.Create(&model.Order{
-		OrderID:  resp.OrderID,
-		Status:   "CREATED",
-		Amount:   totalAmount,
-		Currency: "USD",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("store order in db: %w", err)
-	}
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		err = s.orderRepo.Create(tx, &model.Order{
+			OrderID:  resp.OrderID,
+			Status:   "CREATED",
+			Amount:   totalAmount,
+			Currency: "USD",
+		})
+		if err != nil {
+			return fmt.Errorf("store order in db: %w", err)
+		}
 
-	err = s.orderRepo.CreateOrderItems(orderItems)
-	if err != nil {
-		return nil, fmt.Errorf("store order items in db: %w", err)
-	}
+		err = s.orderRepo.CreateOrderItems(tx, orderItems)
+		if err != nil {
+			return fmt.Errorf("store order items in db: %w", err)
+		}
+		return nil
+	})
 
 	return &dto.PayResponse{
 		OrderID:          resp.OrderID,
@@ -119,16 +127,18 @@ func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) er
 		return fmt.Errorf("paypal api get order: %w", err)
 	}
 
-	err = s.vaultRepo.Create(ctx, &model.VaultedPaymentMethod{
-		UserID:   orderDetail.PaymentSource.PayPal.PayerID,
-		VaultID:  orderDetail.PaymentSource.PayPal.VaultID,
-		Provider: "paypal",
-	})
-	if err != nil {
-		return fmt.Errorf("store user vault info to db: %w", err)
-	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		err = s.vaultRepo.Create(ctx, tx, &model.VaultedPaymentMethod{
+			UserID:   orderDetail.PaymentSource.PayPal.PayerID,
+			VaultID:  orderDetail.PaymentSource.PayPal.VaultID,
+			Provider: "paypal",
+		})
+		if err != nil {
+			return fmt.Errorf("store user vault info to db: %w", err)
+		}
 
-	return s.orderRepo.MarkCompleted(orderID, resp.PayerID)
+		return s.orderRepo.MarkCompleted(tx, orderID, resp.PayerID)
+	})
 }
 
 func (s *paypalServiceImpl) VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error {
@@ -160,27 +170,29 @@ func (s *paypalServiceImpl) handleOrderPaid(ctx context.Context, eventPayload *m
 		return fmt.Errorf("could not find order_id in webhook payload")
 	}
 
-	orderInfo, err := s.orderRepo.MarkPaid(orderID)
-	if err != nil {
-		return fmt.Errorf("mark order paid: %w", err)
-	}
-
-	orderItems, err := s.orderRepo.GetOrderItems(orderID)
-	if err != nil {
-		return fmt.Errorf("get order items: %w", err)
-	}
-
-	// grant items to user inventory
-	for _, item := range orderItems {
-		err = s.inventoryRepo.Upsert(ctx, &model.UserInventory{
-			UserID:    orderInfo.PayerID,
-			ProductID: item.ProductID,
-			Quantity:  item.Quantity,
-		})
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		orderInfo, err := s.orderRepo.MarkPaid(tx, orderID)
 		if err != nil {
-			return fmt.Errorf("update user inventory: %w", err)
+			return fmt.Errorf("mark order paid: %w", err)
 		}
-	}
 
-	return nil
+		orderItems, err := s.orderRepo.GetOrderItems(tx, orderID)
+		if err != nil {
+			return fmt.Errorf("get order items: %w", err)
+		}
+
+		// grant items to user inventory
+		for _, item := range orderItems {
+			err = s.inventoryRepo.Upsert(ctx, tx, &model.UserInventory{
+				UserID:    orderInfo.PayerID,
+				ProductID: item.ProductID,
+				Quantity:  item.Quantity,
+			})
+			if err != nil {
+				return fmt.Errorf("update user inventory: %w", err)
+			}
+		}
+
+		return nil
+	})
 }
