@@ -11,6 +11,8 @@ import (
 	"paypal-integration-demo/internal/config"
 	"paypal-integration-demo/internal/model"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type PaypalClient interface {
@@ -162,6 +164,9 @@ func (c *paypalClientImpl) createOrder(payload map[string]interface{}) (*model.P
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
+
+	// REQUIRED for vault charge
+	req.Header.Set("PayPal-Request-Id", uuid.NewString())
 
 	resp, _ := c.httpClient.Do(req)
 	defer resp.Body.Close()

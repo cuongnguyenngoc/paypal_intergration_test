@@ -147,6 +147,7 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 	if err != nil {
 		return nil, fmt.Errorf("paypal create order with vault: %w", err)
 	}
+	fmt.Println("orderID vault", orderID)
 
 	totalAmount := int32(0)
 	orderItems := make([]*model.OrderItem, len(products))
@@ -167,7 +168,8 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := s.orderRepo.Create(tx, &model.Order{
 			OrderID:  orderID,
-			Status:   "CREATED",
+			PayerID:  userID,
+			Status:   "COMPLETED", // paypal auto capture order when create order with vault so order status should be compeleted
 			Amount:   totalAmount,
 			Currency: "USD",
 		}); err != nil {
@@ -181,13 +183,8 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 		return nil
 	})
 
-	resp, err := s.paypalClient.CaptureOrder(ctx, orderID)
-	if err != nil {
-		return nil, err
-	}
-
 	return &dto.PayResponse{
-		OrderID: resp.OrderID,
+		OrderID: orderID,
 	}, nil
 }
 
