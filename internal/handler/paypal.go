@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"paypal-integration-demo/internal/dto"
 	"paypal-integration-demo/internal/model"
@@ -96,12 +97,23 @@ func (h *PaypalHandler) HandleSuccess(c echo.Context) error {
 func (h *PaypalHandler) PayPalWebhook(c echo.Context) error {
 	ctx := c.Request().Context()
 
+	body, err := io.ReadAll(c.Request().Body)
+	if err != nil {
+		return c.NoContent(http.StatusBadRequest)
+	}
+
+	// 1️⃣ Verify signature FIRST
+	if err := h.paypalService.VerifyWebhookSignature(ctx, c.Request().Header, body); err != nil {
+		// reject fake request
+		return c.NoContent(http.StatusUnauthorized)
+	}
+
 	var event model.PayPalWebhookEvent
 	if err := c.Bind(&event); err != nil {
 		return fmt.Errorf("decode webhook event payload: %w", err)
 	}
 
-	err := h.paypalService.HandleWebhook(ctx, &event)
+	err = h.paypalService.HandleWebhook(ctx, &event)
 	if err != nil {
 		return fmt.Errorf("handle webhook: %w", err)
 	}

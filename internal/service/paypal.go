@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"paypal-integration-demo/internal/client"
 	"paypal-integration-demo/internal/dto"
 	"paypal-integration-demo/internal/model"
@@ -12,6 +13,7 @@ import (
 type PaypalService interface {
 	Pay(ctx context.Context, items []*dto.Item) (*dto.PayResponse, error)
 	CaptureOrder(ctx context.Context, orderID string) error
+	VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error
 	HandleWebhook(ctx context.Context, eventPayload *model.PayPalWebhookEvent) error
 }
 
@@ -127,6 +129,15 @@ func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) er
 	}
 
 	return s.orderRepo.MarkCompleted(orderID, resp.PayerID)
+}
+
+func (s *paypalServiceImpl) VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error {
+	if err := s.paypalClient.VerifyWebhookSignature(ctx, headers, body); err != nil {
+		// reject fake request
+		return fmt.Errorf("unauthorized")
+	}
+
+	return nil
 }
 
 func (s *paypalServiceImpl) HandleWebhook(ctx context.Context, eventPayload *model.PayPalWebhookEvent) error {

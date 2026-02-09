@@ -14,6 +14,7 @@ type Paypal struct {
 	BaseApiURL   string `env:"BASE_API_URL"`
 	ClientID     string `env:"CLIENT_ID"`
 	ClientSecret string `env:"CLIENT_SECRET"`
+	WebhookID    string `env:"WEBHOOK_ID"`
 }
 
 type Environment struct {
