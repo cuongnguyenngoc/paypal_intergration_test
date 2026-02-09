@@ -60,6 +60,7 @@ async function pay() {
   });
 
   const data = await res.json();
+  console.log("data pay", data)
   if (data.order_approval_url) {
     window.location.href = data.order_approval_url;
   }

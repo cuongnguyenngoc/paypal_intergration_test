@@ -11,6 +11,7 @@ import (
 
 type PaypalService interface {
 	Pay(ctx context.Context, items []*dto.Item) (*dto.PayResponse, error)
+	PayAgain(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error)
 	CaptureOrder(ctx context.Context, orderID string) error
 	HandleWebhook(ctx context.Context, eventPayload *model.PayPalWebhookEvent) error
 }
@@ -103,6 +104,75 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, items []*dto.Item) (*dto.Pa
 	return &dto.PayResponse{
 		OrderID:          resp.OrderID,
 		OrderApprovalURL: resp.ApproveURL,
+	}, nil
+}
+
+func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error) {
+	productIDs := make([]string, len(items))
+	itemQuantityMap := make(map[string]int32)
+
+	for i, item := range items {
+		if item.Quantity <= 0 {
+			return nil, fmt.Errorf("item quantity must be positive")
+		}
+		productIDs[i] = item.Sku
+		itemQuantityMap[item.Sku] = item.Quantity
+	}
+
+	products, err := s.productRepo.FindMany(productIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get products: %w", err)
+	}
+	if len(products) != len(items) {
+		return nil, fmt.Errorf("some products not found")
+	}
+
+	vaultID, err := s.vaultRepo.GetVaultID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("no vaulted payment method")
+	}
+
+	resp, err := s.paypalClient.CreateOrder(ctx, vaultID)
+	if err != nil {
+		return nil, fmt.Errorf("paypal create order with vault: %w", err)
+	}
+
+	totalAmount := int32(0)
+	orderItems := make([]*model.OrderItem, len(products))
+
+	for i, product := range products {
+		qty := itemQuantityMap[product.ID]
+		totalAmount += product.Price * qty
+
+		orderItems[i] = &model.OrderItem{
+			OrderID:   resp.OrderID,
+			ProductID: product.ID,
+			Quantity:  qty,
+			UnitPrice: product.Price,
+			Currency:  product.Currency,
+		}
+	}
+
+	if err := s.orderRepo.Create(&model.Order{
+		OrderID:  resp.OrderID,
+		Status:   "CREATED",
+		Amount:   totalAmount,
+		Currency: "USD",
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := s.orderRepo.CreateOrderItems(orderItems); err != nil {
+		return nil, err
+	}
+
+	resp, err = s.paypalClient.CaptureOrder(ctx, resp.OrderID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.PayResponse{
+		OrderID: resp.OrderID,
 	}, nil
 }
 

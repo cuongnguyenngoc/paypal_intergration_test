@@ -10,6 +10,8 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+const userID = "RR837NYEPXP36"
+
 type PaypalHandler struct {
 	paypalService service.PaypalService
 }
@@ -29,6 +31,22 @@ func (h *PaypalHandler) Pay(c echo.Context) error {
 	}
 
 	result, err := h.paypalService.Pay(ctx, req.Items)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+func (h *PaypalHandler) Payagain(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	var req dto.PayRequest
+	if err := c.Bind(&req); err != nil {
+		return err
+	}
+
+	result, err := h.paypalService.PayAgain(ctx, userID, req.Items)
 	if err != nil {
 		return err
 	}
@@ -70,10 +88,10 @@ func (h *PaypalHandler) HandleSuccess(c echo.Context) error {
 	<body>
 		<h2>Payment approved</h2>
 		<p>We are processing your payment.</p>
-		<p>Redirecting to homepage in <span class="countdown" id="countdown">10</span> seconds…</p>
+		<p>Redirecting to homepage in <span class="countdown" id="countdown">15</span> seconds…</p>
 
 		<script>
-			let seconds = 20;
+			let seconds = 15;
 			const el = document.getElementById("countdown");
 
 			const timer = setInterval(function () {
