@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"paypal-integration-demo/internal/client"
@@ -16,8 +17,7 @@ type PaypalService interface {
 	Pay(ctx context.Context, items []*dto.Item) (*dto.PayResponse, error)
 	PayAgain(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error)
 	CaptureOrder(ctx context.Context, orderID string) error
-	VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error
-	HandleWebhook(ctx context.Context, eventPayload *model.PayPalWebhookEvent) error
+	HandleWebhook(ctx context.Context, headers http.Header, body []byte) error
 }
 
 type paypalServiceImpl struct {
@@ -77,7 +77,6 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, items []*dto.Item) (*dto.Pa
 	if err != nil {
 		return nil, fmt.Errorf("paypal api create order: %w", err)
 	}
-	fmt.Println("resp", resp)
 
 	totalAmount := int32(0)
 	orderItems := make([]*model.OrderItem, len(products))
@@ -216,21 +215,22 @@ func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) er
 	})
 }
 
-func (s *paypalServiceImpl) VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error {
-	if err := s.paypalClient.VerifyWebhookSignature(ctx, headers, body); err != nil {
-		// reject fake request
-		return fmt.Errorf("unauthorized")
+func (s *paypalServiceImpl) HandleWebhook(ctx context.Context, headers http.Header, body []byte) error {
+	err := s.paypalClient.VerifyWebhookSignature(ctx, headers, body)
+	if err != nil {
+		return fmt.Errorf("verify webhook signature: %w", err)
 	}
 
-	return nil
-}
+	var eventPayload model.PayPalWebhookEvent
+	if err := json.Unmarshal(body, &eventPayload); err != nil {
+		return fmt.Errorf("decode webhook payload: %w", err)
+	}
 
-func (s *paypalServiceImpl) HandleWebhook(ctx context.Context, eventPayload *model.PayPalWebhookEvent) error {
 	switch eventPayload.EventType {
 	case "PAYMENT.CAPTURE.COMPLETED":
 		// mark order as paid
 		fmt.Println("payment completed")
-		return s.handleOrderPaid(ctx, eventPayload)
+		return s.handleOrderPaid(ctx, &eventPayload)
 	case "BILLING.SUBSCRIPTION.ACTIVATED":
 		// activate subscription
 		fmt.Println("subscription activated")

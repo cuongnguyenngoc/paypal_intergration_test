@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"paypal-integration-demo/internal/dto"
-	"paypal-integration-demo/internal/model"
 	"paypal-integration-demo/internal/service"
 
 	"github.com/labstack/echo/v4"
@@ -120,18 +119,7 @@ func (h *PaypalHandler) PayPalWebhook(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	// 1️⃣ Verify signature FIRST
-	if err := h.paypalService.VerifyWebhookSignature(ctx, c.Request().Header, body); err != nil {
-		// reject fake request
-		return c.NoContent(http.StatusUnauthorized)
-	}
-
-	var event model.PayPalWebhookEvent
-	if err := c.Bind(&event); err != nil {
-		return fmt.Errorf("decode webhook event payload: %w", err)
-	}
-
-	err = h.paypalService.HandleWebhook(ctx, &event)
+	err = h.paypalService.HandleWebhook(ctx, c.Request().Header, body)
 	if err != nil {
 		return fmt.Errorf("handle webhook: %w", err)
 	}

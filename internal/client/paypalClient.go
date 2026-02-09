@@ -240,7 +240,6 @@ func (c *paypalClientImpl) CaptureOrder(ctx context.Context, orderID string) (*H
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decode paypal response: %w", err)
 	}
-	fmt.Println("result", result)
 
 	return &HandleOrderResponse{
 		OrderID: result.ID,
