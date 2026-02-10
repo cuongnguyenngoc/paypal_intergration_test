@@ -74,3 +74,16 @@ type UserSubscription struct {
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }
+
+type Merchant struct {
+	ID   string `gorm:"primaryKey"`
+	Name string
+
+	PayPalMerchantID   string
+	PayPalAccessToken  string
+	PayPalRefreshToken string
+	TokenExpiresAt     time.Time
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}

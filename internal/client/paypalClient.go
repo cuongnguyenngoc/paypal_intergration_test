@@ -8,14 +8,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"paypal-integration-demo/internal/config"
 	"paypal-integration-demo/internal/model"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 type PaypalClient interface {
+	BuildConnectURL(merchantID string) string
+	ExchangeAuthCode(ctx context.Context, code string) (*model.PayPalToken, error)
 	CreateOrderForApproval(ctx context.Context, serviceBaseUrl string, userID string, currency string, cost int32) (*HandleOrderResponse, error)
 	CreateOrderWithVault(ctx context.Context, userID string, vaultID string, currency string, cost int32) (string, error)
 	CaptureOrder(ctx context.Context, orderID string) (*HandleOrderResponse, error)
@@ -29,6 +33,7 @@ type paypalClientImpl struct {
 	paypalClientID     string
 	paypalClientSecret string
 	paypalWebhookID    string
+	paypalRedirectURL  string
 }
 
 type HandleOrderResponse struct {
@@ -36,6 +41,10 @@ type HandleOrderResponse struct {
 	ApproveURL string
 	Status     string
 	PayerID    string
+}
+
+type ConnectResponse struct {
+	RedirectURL string
 }
 
 func NewPaypalClient(paypalCfg *config.Paypal) PaypalClient {
@@ -47,6 +56,7 @@ func NewPaypalClient(paypalCfg *config.Paypal) PaypalClient {
 		paypalClientID:     paypalCfg.ClientID,
 		paypalClientSecret: paypalCfg.ClientSecret,
 		paypalWebhookID:    paypalCfg.WebhookID,
+		paypalRedirectURL:  paypalCfg.RedirectURL,
 	}
 }
 
@@ -75,6 +85,45 @@ func (c *paypalClientImpl) getAccessToken() (string, error) {
 	json.NewDecoder(resp.Body).Decode(&res)
 
 	return res.AccessToken, nil
+}
+
+func (c *paypalClientImpl) BuildConnectURL(merchantID string) string {
+	return fmt.Sprintf(
+		"https://www.sandbox.paypal.com/connect?flowEntry=static&client_id=%s&scope=%s&redirect_uri=%s&state=%s",
+		c.paypalClientID,
+		url.QueryEscape("openid profile email https://uri.paypal.com/services/payments"),
+		url.QueryEscape(c.paypalRedirectURL),
+		merchantID,
+	)
+}
+
+func (c *paypalClientImpl) ExchangeAuthCode(ctx context.Context, code string) (*model.PayPalToken, error) {
+	data := url.Values{}
+	data.Set("grant_type", "authorization_code")
+	data.Set("code", code)
+
+	req, _ := http.NewRequestWithContext(
+		ctx,
+		"POST",
+		c.baseApiURL+"/v1/oauth2/token",
+		strings.NewReader(data.Encode()),
+	)
+
+	req.SetBasicAuth(c.paypalClientID, c.paypalClientSecret)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var token model.PayPalToken
+	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
+		return nil, err
+	}
+
+	return &token, nil
 }
 
 func (c *paypalClientImpl) CreateOrderForApproval(ctx context.Context, serviceBaseUrl string, userID string, currency string, cost int32) (*HandleOrderResponse, error) {

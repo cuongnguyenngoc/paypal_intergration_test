@@ -14,6 +14,8 @@ import (
 )
 
 type PaypalService interface {
+	Connect(merchantID string) string
+	ExchangeAuthCode(ctx context.Context, code string) (*model.PayPalToken, error)
 	Pay(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error)
 	PayAgain(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error)
 	CaptureOrder(ctx context.Context, orderID string) error
@@ -26,6 +28,7 @@ type paypalServiceImpl struct {
 	db               *gorm.DB
 	paypalClient     client.PaypalClient
 	serviceBaseUrl   string
+	merchantRepo     repository.MerchantRepository
 	productRepo      repository.ProductRepository
 	orderRepo        repository.OrderRepository
 	webhookEventRepo repository.WebhookEventRepository
@@ -38,6 +41,7 @@ func NewPaypalService(
 	db *gorm.DB,
 	paypalClient client.PaypalClient,
 	serviceBaseUrl string,
+	merchantRepo repository.MerchantRepository,
 	productRepo repository.ProductRepository,
 	orderRepo repository.OrderRepository,
 	webhookEventRepo repository.WebhookEventRepository,
@@ -49,6 +53,7 @@ func NewPaypalService(
 		db:               db,
 		paypalClient:     paypalClient,
 		serviceBaseUrl:   serviceBaseUrl,
+		merchantRepo:     merchantRepo,
 		productRepo:      productRepo,
 		orderRepo:        orderRepo,
 		webhookEventRepo: webhookEventRepo,
@@ -56,6 +61,14 @@ func NewPaypalService(
 		vaultRepo:        vaultRepo,
 		subscriptionRepo: subscriptionRepo,
 	}
+}
+
+func (s *paypalServiceImpl) Connect(merchantID string) string {
+	return s.paypalClient.BuildConnectURL(merchantID)
+}
+
+func (s *paypalServiceImpl) ExchangeAuthCode(ctx context.Context, code string) (*model.PayPalToken, error) {
+	return s.paypalClient.ExchangeAuthCode(ctx, code)
 }
 
 func (s *paypalServiceImpl) Pay(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error) {

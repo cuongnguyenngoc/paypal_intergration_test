@@ -11,13 +11,45 @@ import (
 )
 
 type PaypalHandler struct {
-	paypalService service.PaypalService
+	paypalService   service.PaypalService
+	merchantService service.MerchantService
 }
 
-func NewPaypalHandler(paypalService service.PaypalService) *PaypalHandler {
+func NewPaypalHandler(paypalService service.PaypalService, merchantService service.MerchantService) *PaypalHandler {
 	return &PaypalHandler{
-		paypalService: paypalService,
+		paypalService:   paypalService,
+		merchantService: merchantService,
 	}
+}
+
+func (h *PaypalHandler) ConnectMerchant(c echo.Context) error {
+	merchantID := c.Param("merchantID")
+
+	url := h.paypalService.Connect(merchantID)
+
+	return c.Redirect(http.StatusFound, url)
+}
+
+func (h *PaypalHandler) OAuthCallback(c echo.Context) error {
+	ctx := c.Request().Context()
+	code := c.QueryParam("code")
+	merchantID := c.QueryParam("state")
+
+	if code == "" || merchantID == "" {
+		return c.String(http.StatusBadRequest, "invalid oauth callback")
+	}
+
+	token, err := h.paypalService.ExchangeAuthCode(ctx, code)
+	if err != nil {
+		return err
+	}
+
+	err = h.merchantService.UpdatePaypalTokens(ctx, merchantID, token)
+	if err != nil {
+		return err
+	}
+
+	return c.String(http.StatusOK, "PayPal connected successfully")
 }
 
 func (h *PaypalHandler) Pay(c echo.Context) error {

@@ -22,3 +22,11 @@ type SubscribeRequest struct {
 type SubscribeResponse struct {
 	ApprovalURL string `json:"approval_url"`
 }
+
+type CreateMerchantRequest struct {
+	MerchantName string `json:"name"`
+}
+
+type PaypalConnectRequest struct {
+	MerchantID string `json:"merchant_id"`
+}

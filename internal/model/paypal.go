@@ -92,3 +92,9 @@ type PayPalSubscriptionResource struct {
 
 	StartTime time.Time `json:"start_time"`
 }
+
+type PayPalToken struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+}

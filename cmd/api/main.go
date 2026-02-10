@@ -40,6 +40,7 @@ func main() {
 		log.Fatal("seed some products data into db")
 	}
 
+	merchantRepo := repository.NewMerchantRepository(db)
 	orderRepo := repository.NewOrderRepository(db)
 	webhookEventRepo := repository.NewWebhookEventRepository(db)
 	inventoryRepo := repository.NewInventoryRepository(db)
@@ -49,6 +50,7 @@ func main() {
 	paypalService := service.NewPaypalService(
 		db,
 		paypalClient, cfg.BaseURL,
+		merchantRepo,
 		productRepo,
 		orderRepo,
 		webhookEventRepo,
@@ -57,11 +59,12 @@ func main() {
 		subscriptionRepo,
 	)
 	userService := service.NewUserService(inventoryRepo)
+	merchantService := service.NewMerchantService(merchantRepo)
 
 	serverAddr := cfg.HTTP.Host + ":" + cfg.HTTP.Port
 
 	// Init HTTP server
-	srv := server.NewServer(paypalService, userService)
+	srv := server.NewServer(paypalService, userService, merchantService)
 
 	log.Println("Starting HTTP server on", serverAddr)
 	go func() {
