@@ -152,3 +152,26 @@ func (h *PaypalHandler) CheckUserHaveSavedPayment(c echo.Context) error {
 		"has_saved_payment": haveSaved,
 	})
 }
+
+func (h *PaypalHandler) SubscribeSubscription(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	userID := c.Get("user_id").(string)
+	if userID == "" {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized to use this endpoint")
+	}
+
+	var req dto.SubscribeRequest
+	if err := c.Bind(&req); err != nil {
+		return err
+	}
+
+	approveURL, err := h.paypalService.SubscribeSubscription(ctx, userID, req.ItemID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, &dto.SubscribeResponse{
+		ApprovalURL: approveURL,
+	})
+}

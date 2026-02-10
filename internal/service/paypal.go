@@ -19,6 +19,7 @@ type PaypalService interface {
 	CaptureOrder(ctx context.Context, orderID string) error
 	HandleWebhook(ctx context.Context, headers http.Header, body []byte) error
 	CheckUserHaveSavedPayment(ctx context.Context, userID string) (bool, error)
+	SubscribeSubscription(ctx context.Context, userID string, productCode string) (approveURL string, err error)
 }
 
 type paypalServiceImpl struct {
@@ -30,6 +31,7 @@ type paypalServiceImpl struct {
 	webhookEventRepo repository.WebhookEventRepository
 	inventoryRepo    repository.InventoryRepository
 	vaultRepo        repository.VaultRepository
+	subscriptionRepo repository.SubscriptionRepository
 }
 
 func NewPaypalService(
@@ -41,6 +43,7 @@ func NewPaypalService(
 	webhookEventRepo repository.WebhookEventRepository,
 	inventoryRepo repository.InventoryRepository,
 	vaultRepo repository.VaultRepository,
+	subscriptionRepo repository.SubscriptionRepository,
 ) PaypalService {
 	return &paypalServiceImpl{
 		db:               db,
@@ -51,6 +54,7 @@ func NewPaypalService(
 		webhookEventRepo: webhookEventRepo,
 		inventoryRepo:    inventoryRepo,
 		vaultRepo:        vaultRepo,
+		subscriptionRepo: subscriptionRepo,
 	}
 }
 
@@ -298,4 +302,34 @@ func (s *paypalServiceImpl) handlePaymentTokenCreated(ctx context.Context, event
 	}
 
 	return nil
+}
+
+func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID string, productCode string) (approveURL string, err error) {
+	plan, err := s.subscriptionRepo.GetPaypalPlanByProductCode(ctx, productCode)
+	if err != nil {
+		return "", err
+	}
+
+	subID, approveURL, err := s.paypalClient.CreateUserSubscription(
+		ctx,
+		s.serviceBaseUrl,
+		plan.PayPalPlanID,
+		userID,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	// store as PENDING, will activate via webhook
+	err = s.subscriptionRepo.CreateSubscription(ctx, &model.UserSubscription{
+		UserID:               userID,
+		ProductCode:          productCode,
+		PayPalSubscriptionID: subID,
+		Status:               "PENDING",
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return approveURL, nil
 }

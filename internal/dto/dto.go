@@ -14,3 +14,11 @@ type PayResponse struct {
 	OrderID          string `json:"order_id"`
 	OrderApprovalURL string `json:"order_approval_url"`
 }
+
+type SubscribeRequest struct {
+	ItemID string `json:"item_id"`
+}
+
+type SubscribeResponse struct {
+	ApprovalURL string `json:"approval_url"`
+}

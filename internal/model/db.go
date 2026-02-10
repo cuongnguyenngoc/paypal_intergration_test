@@ -32,17 +32,6 @@ type OrderItem struct {
 	CreatedAt time.Time
 }
 
-type Subscription struct {
-	SubscriptionID string `gorm:"primaryKey;size:64;uniqueIndex;not null"`
-	PlanID         string `gorm:"size:64"`
-	CustomerID     string `gorm:"size:64;index;not null"`
-	Status         string `gorm:"size:32;not null"` // CREATED, ACTIVE, CANCELLED
-	StartedAt      *time.Time
-	EndedAt        *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-}
-
 type WebhookEvent struct {
 	EventID     string `gorm:"primaryKey;size:128;uniqueIndex;not null"`
 	EventType   string `gorm:"size:64;index"`
@@ -66,4 +55,22 @@ type UserVault struct {
 	// IsActive  bool `gorm:"not null;default:true"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type PayPalPlan struct {
+	ProductCode     string `gorm:"primaryKey"` // vip_monthly
+	PayPalProductID string
+	PayPalPlanID    string
+}
+
+type UserSubscription struct {
+	ID                   uint   `gorm:"primaryKey"`
+	UserID               string `gorm:"index"`
+	ProductCode          string
+	PayPalSubscriptionID string `gorm:"uniqueIndex"`
+	Status               string // ACTIVE, CANCELLED, SUSPENDED
+	StartTime            time.Time
+	NextBillingTime      *time.Time
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }

@@ -20,6 +20,7 @@ type PaypalClient interface {
 	CreateOrderWithVault(ctx context.Context, userID string, vaultID string, currency string, cost int32) (string, error)
 	CaptureOrder(ctx context.Context, orderID string) (*HandleOrderResponse, error)
 	VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error
+	CreateUserSubscription(ctx context.Context, serviceBaseUrl string, planID string, userID string) (subscriptionID string, approveURL string, err error)
 }
 
 type paypalClientImpl struct {
@@ -285,6 +286,61 @@ func (c *paypalClientImpl) VerifyWebhookSignature(ctx context.Context, headers h
 	}
 
 	return nil
+}
+
+func (c *paypalClientImpl) CreateUserSubscription(ctx context.Context, serviceBaseUrl string, planID string, userID string) (subscriptionID string, approveURL string, err error) {
+	accessToken, err := c.getAccessToken()
+	if err != nil {
+		return "", "", err
+	}
+
+	payload := map[string]interface{}{
+		"plan_id":   planID,
+		"custom_id": userID,
+		"application_context": map[string]interface{}{
+			"user_action": "SUBSCRIBE_NOW",
+			"return_url":  fmt.Sprintf("%s/api/paypal/subscription/success", serviceBaseUrl),
+			"cancel_url":  serviceBaseUrl,
+		},
+	}
+
+	body, _ := json.Marshal(payload)
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		c.baseApiURL+"/v1/billing/subscriptions",
+		bytes.NewBuffer(body),
+	)
+	if err != nil {
+		return "", "", err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return "", "", fmt.Errorf("paypal subscription error: %s", b)
+	}
+
+	var result model.PaypalResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", "", err
+	}
+
+	approveURL = _extractApproveURL(result.Links)
+	if approveURL == "" {
+		return result.ID, "", fmt.Errorf("approve url not found")
+	}
+
+	return result.ID, approveURL, nil
 }
 
 func _extractApproveURL(links []model.PaypalLink) string {

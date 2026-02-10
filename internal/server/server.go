@@ -56,6 +56,7 @@ func (s *Server) setupRoutes() {
 	paypal.POST("/pay", s.paypalHandler.Pay)
 	paypal.POST("/pay-again", s.paypalHandler.PayAgain)
 	paypal.GET("/have-saved-payment", s.paypalHandler.CheckUserHaveSavedPayment)
+	paypal.POST("/subscribe", s.paypalHandler.SubscribeSubscription)
 
 	// -------- paypal webhooks / callbacks --------
 	paypalPublic := api.Group("/paypal")

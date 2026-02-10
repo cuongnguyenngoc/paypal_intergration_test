@@ -1,5 +1,7 @@
 package model
 
+import "time"
+
 type Payer struct {
 	PayerID string `json:"payer_id"`
 	Email   string `json:"email_address"`
@@ -73,4 +75,17 @@ type PayPalWebhookEvent struct {
 	EventType  string         `json:"event_type"`
 	CreateTime string         `json:"create_time"`
 	Resource   PaypalResource `json:"resource"`
+}
+
+type PayPalSubscriptionResource struct {
+	ID       string `json:"id"`
+	PlanID   string `json:"plan_id"`
+	CustomID string `json:"custom_id"`
+	Status   string `json:"status"`
+
+	BillingInfo struct {
+		NextBillingTime *time.Time `json:"next_billing_time"`
+	} `json:"billing_info"`
+
+	StartTime time.Time `json:"start_time"`
 }
