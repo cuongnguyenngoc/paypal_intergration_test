@@ -289,8 +289,9 @@ func (s *paypalServiceImpl) handlePaymentTokenCreated(ctx context.Context, event
 
 	// Upsert user vault info
 	err = s.vaultRepo.Create(ctx, &model.UserVault{
-		UserID:  orderInfo.UserID,
-		VaultID: resource.ID,
+		UserID:   orderInfo.UserID,
+		VaultID:  resource.ID,
+		Provider: "paypal",
 	})
 	if err != nil {
 		return fmt.Errorf("save user paypal vault: %w", err)
