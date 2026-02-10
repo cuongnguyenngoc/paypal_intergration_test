@@ -68,6 +68,9 @@ type PaypalResource struct {
 	// Vault-specific
 	Metadata        PayPalMetadata `json:"metadata"`
 	PaymentResource PaymentSource  `json:"payment_source"`
+
+	// SUBSCRIPTION
+	Subscription *PayPalSubscriptionResource `json:"subscription,omitempty"`
 }
 
 type PayPalWebhookEvent struct {

@@ -237,6 +237,10 @@ func (s *paypalServiceImpl) HandleWebhook(ctx context.Context, headers http.Head
 	case "BILLING.SUBSCRIPTION.ACTIVATED":
 		// activate subscription
 		fmt.Println("subscription activated")
+		return s.handleSubscriptionActivated(ctx, &eventPayload)
+	case "BILLING.SUBSCRIPTION.CANCELLED":
+		fmt.Println("subscription canceled")
+		return s.handleSubscriptionCancelled(ctx, &eventPayload)
 	}
 
 	return nil
@@ -302,6 +306,29 @@ func (s *paypalServiceImpl) handlePaymentTokenCreated(ctx context.Context, event
 	}
 
 	return nil
+}
+
+func (s *paypalServiceImpl) handleSubscriptionActivated(ctx context.Context, event *model.PayPalWebhookEvent) error {
+	res := event.Resource.Subscription
+
+	if res.ID == "" || res.CustomID == "" {
+		return fmt.Errorf("invalid subscription webhook")
+	}
+
+	return s.subscriptionRepo.ActivateSubscription(ctx,
+		res.ID,
+		res.StartTime,
+		res.BillingInfo.NextBillingTime,
+	)
+}
+
+func (s *paypalServiceImpl) handleSubscriptionCancelled(ctx context.Context, event *model.PayPalWebhookEvent) error {
+	subID := event.Resource.Subscription.ID
+	if subID == "" {
+		return nil
+	}
+
+	return s.subscriptionRepo.CancelSubscription(ctx, subID)
 }
 
 func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID string, productCode string) (approveURL string, err error) {
