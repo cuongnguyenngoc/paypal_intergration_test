@@ -20,9 +20,9 @@ import (
 type PaypalClient interface {
 	BuildConnectURL(merchantID string) string
 	ExchangeAuthCode(ctx context.Context, code string) (*model.PayPalToken, error)
-	CreateOrderForApproval(ctx context.Context, serviceBaseUrl string, userID string, currency string, cost int32) (*HandleOrderResponse, error)
-	CreateOrderWithVault(ctx context.Context, userID string, vaultID string, currency string, cost int32) (string, error)
-	CaptureOrder(ctx context.Context, orderID string) (*HandleOrderResponse, error)
+	CreateOrderForApproval(ctx context.Context, serviceBaseUrl string, userID string, currency string, cost int32, merchantToken string) (*HandleOrderResponse, error)
+	CreateOrderWithVault(ctx context.Context, userID string, vaultID string, currency string, cost int32, merchantToken string) (string, error)
+	CaptureOrder(ctx context.Context, orderID string, merchantToken string) (*HandleOrderResponse, error)
 	VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error
 	CreateUserSubscription(ctx context.Context, serviceBaseUrl string, planID string, userID string) (subscriptionID string, approveURL string, err error)
 }
@@ -91,7 +91,7 @@ func (c *paypalClientImpl) BuildConnectURL(merchantID string) string {
 	return fmt.Sprintf(
 		"https://www.sandbox.paypal.com/connect?flowEntry=static&client_id=%s&scope=%s&redirect_uri=%s&state=%s",
 		c.paypalClientID,
-		url.QueryEscape("openid profile email https://uri.paypal.com/services/payments"),
+		url.QueryEscape("https://uri.paypal.com/services/payments"),
 		url.QueryEscape(c.paypalRedirectURL),
 		merchantID,
 	)
@@ -126,7 +126,7 @@ func (c *paypalClientImpl) ExchangeAuthCode(ctx context.Context, code string) (*
 	return &token, nil
 }
 
-func (c *paypalClientImpl) CreateOrderForApproval(ctx context.Context, serviceBaseUrl string, userID string, currency string, cost int32) (*HandleOrderResponse, error) {
+func (c *paypalClientImpl) CreateOrderForApproval(ctx context.Context, serviceBaseUrl string, userID string, currency string, cost int32, merchantToken string) (*HandleOrderResponse, error) {
 	payload := map[string]interface{}{
 		"intent": "CAPTURE",
 		"purchase_units": []map[string]interface{}{
@@ -157,7 +157,7 @@ func (c *paypalClientImpl) CreateOrderForApproval(ctx context.Context, serviceBa
 		},
 	}
 
-	result, err := c.createOrder(payload)
+	result, err := c.createOrder(payload, merchantToken)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (c *paypalClientImpl) CreateOrderForApproval(ctx context.Context, serviceBa
 	}, nil
 }
 
-func (c *paypalClientImpl) CreateOrderWithVault(ctx context.Context, userID string, vaultID string, currency string, cost int32) (string, error) {
+func (c *paypalClientImpl) CreateOrderWithVault(ctx context.Context, userID string, vaultID string, currency string, cost int32, merchantToken string) (string, error) {
 	payload := map[string]interface{}{
 		"intent": "CAPTURE",
 		"purchase_units": []map[string]interface{}{
@@ -189,7 +189,7 @@ func (c *paypalClientImpl) CreateOrderWithVault(ctx context.Context, userID stri
 		},
 	}
 
-	result, err := c.createOrder(payload)
+	result, err := c.createOrder(payload, merchantToken)
 	if err != nil {
 		return "", err
 	}
@@ -197,12 +197,7 @@ func (c *paypalClientImpl) CreateOrderWithVault(ctx context.Context, userID stri
 	return result.ID, nil
 }
 
-func (c *paypalClientImpl) createOrder(payload map[string]interface{}) (*model.PaypalResult, error) {
-	accessToken, err := c.getAccessToken()
-	if err != nil {
-		return nil, err
-	}
-
+func (c *paypalClientImpl) createOrder(payload map[string]interface{}, merchantToken string) (*model.PaypalResult, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("marshal req payload: %w", err)
@@ -214,7 +209,7 @@ func (c *paypalClientImpl) createOrder(payload map[string]interface{}) (*model.P
 		return nil, fmt.Errorf("http new request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Authorization", "Bearer "+merchantToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	// REQUIRED for vault charge
@@ -236,12 +231,7 @@ func (c *paypalClientImpl) createOrder(payload map[string]interface{}) (*model.P
 	return &result, nil
 }
 
-func (c *paypalClientImpl) CaptureOrder(ctx context.Context, orderID string) (*HandleOrderResponse, error) {
-	accessToken, err := c.getAccessToken()
-	if err != nil {
-		return nil, fmt.Errorf("get paypal access token: %w", err)
-	}
-
+func (c *paypalClientImpl) CaptureOrder(ctx context.Context, orderID string, merchantToken string) (*HandleOrderResponse, error) {
 	url := fmt.Sprintf(
 		"%s/v2/checkout/orders/%s/capture",
 		c.baseApiURL,
@@ -258,7 +248,7 @@ func (c *paypalClientImpl) CaptureOrder(ctx context.Context, orderID string) (*H
 		return nil, fmt.Errorf("create capture request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Authorization", "Bearer "+merchantToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)

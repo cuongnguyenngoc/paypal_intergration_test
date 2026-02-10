@@ -1,19 +1,70 @@
+<h2>PayPal Multi-Merchant Demo</h2>
+
+<!-- Merchant Section -->
+<div style="margin-bottom:20px;">
+  <h3>Merchant</h3>
+
+  <div id="merchant-info">
+    <button onclick="createMerchant()">Create Merchant</button>
+  </div>
+
+  <div id="connect-section" style="display:none; margin-top:10px;">
+    <button onclick="connectPaypal()">Connect PayPal</button>
+  </div>
+</div>
+
+<hr/>
+
 <!-- Inventory Display Area -->
-<div id="inventory-section" style="margin-bottom: 20px;">
+<div id="inventory-section" style="margin-bottom: 20px; display:none;">
   <h3>User Inventory</h3>
   <ul id="inventory-list">Loading inventory...</ul>
 </div>
 
-<button onclick="pay()">Pay Now</button>
+<button id="pay-btn" onclick="pay()" disabled>Pay Now</button>
 <button id="pay-again-btn" onclick="payAgain()" style="display:none;">
   Pay Again (Saved Payment)
 </button>
 
 <script>
+const MERCHANT_KEY = "demo_merchant_id";
+
+/* ---------------- Merchant ---------------- */
+
+async function createMerchant() {
+  const res = await fetch("/api/merchants/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Demo Shop" })
+  });
+
+  if (!res.ok) return;
+
+  const data = await res.json();
+  console.log("data", data)
+  localStorage.setItem(MERCHANT_KEY, data.id);
+
+  document.getElementById("merchant-info").innerHTML =
+    `<strong>Merchant ID:</strong> ${data.id}`;
+
+  document.getElementById("connect-section").style.display = "block";
+}
+
+function connectPaypal() {
+  const merchantId = localStorage.getItem(MERCHANT_KEY);
+  if (!merchantId) return alert("Create merchant first");
+
+  window.location.href = `/api/merchants/${merchantId}/paypal/connect`;
+}
+
+/* ---------------- Inventory ---------------- */
+
 async function loadInventory() {
   const list = document.getElementById("inventory-list");
   try {
-    const res = await fetch("/api/inventories");
+    const res = await fetch("/api/inventories", {
+      headers: merchantHeader(),
+    });
     const data = await res.json();
 
     if (!data || data.length === 0) {
@@ -21,53 +72,37 @@ async function loadInventory() {
       return;
     }
 
-    const grouped = data.reduce((acc, item) => {
-      const uid = item.UserID;
-      if (!acc[uid]) acc[uid] = [];
-      acc[uid].push(item);
-      return acc;
-    }, {});
-
-    // Clear loading text and map items to list elements
-    list.innerHTML = Object.keys(grouped).map(userId => `
-      <li style="margin-bottom: 15px; list-style: none;">
-        <div style="background: #f4f4f4; padding: 5px 10px; border-radius: 4px;">
-           <strong>👤 User: ${userId}</strong>
-        </div>
-        <ul style="margin-top: 5px;">
-          ${grouped[userId].map(item => `
-            <li>
-              ${item.ProductID || item.product_id}: 
-              <strong>x${item.Quantity || item.quantity}</strong>
-            </li>
-          `).join("")}
-        </ul>
+    list.innerHTML = data.map(item => `
+      <li>
+        ${item.product_id || item.ProductID} — <strong>x${item.quantity || item.Quantity}</strong>
       </li>
     `).join("");
   } catch (err) {
     list.innerHTML = "<li>Error loading inventory.</li>";
-    console.error(err);
   }
 }
+
+/* ---------------- Payments ---------------- */
 
 async function checkSavedPayment() {
-  try {
-    const res = await fetch("/api/paypal/have-saved-payment");
-    if (!res.ok) return;
+  const res = await fetch("/api/paypal/have-saved-payment", {
+    headers: merchantHeader(),
+  });
+  if (!res.ok) return;
 
-    const data = await res.json();
-    console.log("data", data)
-    if (data.has_saved_payment) {
-      document.getElementById("pay-again-btn").style.display = "inline-block";
-    }
-  } catch (err) {
-    console.error("failed to check saved payment", err);
+  const data = await res.json();
+  if (data.has_saved_payment) {
+    document.getElementById("pay-again-btn").style.display = "inline-block";
   }
 }
+
 async function pay() {
   const res = await fetch("/api/paypal/pay", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...merchantHeader(),
+    },
     body: JSON.stringify({
       items: [{ sku: "coin_100", quantity: 1 }],
     })
@@ -82,7 +117,10 @@ async function pay() {
 async function payAgain() {
   const res = await fetch("/api/paypal/pay-again", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...merchantHeader(),
+    },
     body: JSON.stringify({
       items: [{ sku: "coin_100", quantity: 1 }],
     })
@@ -93,11 +131,34 @@ async function payAgain() {
     return pay();
   }
 
-  alert("Payment successful 🎉. Purchased items will be added to your inventory shortly!");
+  alert("Payment successful 🎉 Inventory will update shortly.");
   loadInventory();
 }
 
-// initial load inventory
-loadInventory();
-checkSavedPayment();
+/* ---------------- Helpers ---------------- */
+
+function merchantHeader() {
+  const merchantId = localStorage.getItem(MERCHANT_KEY);
+  return merchantId ? { "X-Merchant-Id": merchantId } : {};
+}
+
+function enablePayments() {
+  document.getElementById("pay-btn").disabled = false;
+  document.getElementById("inventory-section").style.display = "block";
+}
+
+/* ---------------- Init ---------------- */
+
+(function init() {
+  const merchantId = localStorage.getItem(MERCHANT_KEY);
+  if (!merchantId) return;
+
+  document.getElementById("merchant-info").innerHTML =
+    `<strong>Merchant ID:</strong> ${merchantId}`;
+  document.getElementById("connect-section").style.display = "block";
+
+  enablePayments();
+  loadInventory();
+  checkSavedPayment();
+})();
 </script>

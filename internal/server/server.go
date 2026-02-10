@@ -48,10 +48,11 @@ func (s *Server) setupRoutes() {
 
 	api.GET("/inventories", s.userHandler.GetUsersInventory)
 	api.POST("/merchants/create", s.merchantHandler.CreateMerchant)
+	api.GET("/merchants/:merchantID/paypal/connect", s.paypalHandler.ConnectMerchant)
 
 	// -------- paypal --------
 	paypal := api.Group("/paypal")
-	paypal.POST("/connect", s.paypalHandler.ConnectMerchant)
+	paypal.GET("/oauth/callback", s.paypalHandler.OAuthCallback)
 	paypal.POST("/pay", s.paypalHandler.Pay)
 	paypal.POST("/pay-again", s.paypalHandler.PayAgain)
 	paypal.GET("/have-saved-payment", s.paypalHandler.CheckUserHaveSavedPayment)

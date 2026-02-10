@@ -10,6 +10,9 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+// for demo purpose: user who receive items from merchant
+const userID = "demo-user-001"
+
 type PaypalHandler struct {
 	paypalService   service.PaypalService
 	merchantService service.MerchantService
@@ -22,11 +25,19 @@ func NewPaypalHandler(paypalService service.PaypalService, merchantService servi
 	}
 }
 
+func merchantIDFromHeader(c echo.Context) (string, error) {
+	merchantID := c.Request().Header.Get("X-Merchant-Id")
+	if merchantID == "" {
+		return "", echo.NewHTTPError(http.StatusBadRequest, "missing X-Merchant-Id header")
+	}
+	return merchantID, nil
+}
+
 func (h *PaypalHandler) ConnectMerchant(c echo.Context) error {
 	merchantID := c.Param("merchantID")
 
 	url := h.paypalService.Connect(merchantID)
-
+	fmt.Println("url", url)
 	return c.Redirect(http.StatusFound, url)
 }
 
@@ -55,9 +66,9 @@ func (h *PaypalHandler) OAuthCallback(c echo.Context) error {
 func (h *PaypalHandler) Pay(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	userID := c.Get("user_id").(string)
-	if userID == "" {
-		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized to use this endpoint")
+	merchantID, err := merchantIDFromHeader(c)
+	if err != nil {
+		return err
 	}
 
 	var req dto.PayRequest
@@ -65,7 +76,7 @@ func (h *PaypalHandler) Pay(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid req body")
 	}
 
-	result, err := h.paypalService.Pay(ctx, userID, req.Items)
+	result, err := h.paypalService.Pay(ctx, merchantID, userID, req.Items)
 	if err != nil {
 		return err
 	}
@@ -76,9 +87,9 @@ func (h *PaypalHandler) Pay(c echo.Context) error {
 func (h *PaypalHandler) PayAgain(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	userID := c.Get("user_id").(string)
-	if userID == "" {
-		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized to use this endpoint")
+	merchantID, err := merchantIDFromHeader(c)
+	if err != nil {
+		return err
 	}
 
 	var req dto.PayRequest
@@ -86,7 +97,7 @@ func (h *PaypalHandler) PayAgain(c echo.Context) error {
 		return err
 	}
 
-	result, err := h.paypalService.PayAgain(ctx, userID, req.Items)
+	result, err := h.paypalService.PayAgain(ctx, merchantID, userID, req.Items)
 	if err != nil {
 		return err
 	}
@@ -95,17 +106,17 @@ func (h *PaypalHandler) PayAgain(c echo.Context) error {
 }
 
 func (h *PaypalHandler) HandleSuccess(c echo.Context) error {
-	ctx := c.Request().Context()
+	// ctx := c.Request().Context()
 
 	orderID := c.QueryParam("token")
 	if orderID == "" {
 		return c.String(400, "missing order token")
 	}
 
-	err := h.paypalService.CaptureOrder(ctx, orderID)
-	if err != nil {
-		return err
-	}
+	// err := h.paypalService.CaptureOrder(ctx, orderID)
+	// if err != nil {
+	// 	return err
+	// }
 
 	html := `
 	<!DOCTYPE html>
@@ -169,11 +180,6 @@ func (h *PaypalHandler) PayPalWebhook(c echo.Context) error {
 
 func (h *PaypalHandler) CheckUserHaveSavedPayment(c echo.Context) error {
 	ctx := c.Request().Context()
-
-	userID := c.Get("user_id").(string)
-	if userID == "" {
-		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized to use this endpoint")
-	}
 
 	haveSaved, err := h.paypalService.CheckUserHaveSavedPayment(ctx, userID)
 	if err != nil {

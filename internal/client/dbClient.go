@@ -28,6 +28,7 @@ func InitMysqlClient(databaseURL string) *gorm.DB {
 
 	if err := db.AutoMigrate(
 		&model.Product{},
+		&model.Merchant{},
 		&model.Order{},
 		&model.OrderItem{},
 		&model.UserVault{},

@@ -67,7 +67,7 @@ type UserSubscription struct {
 	ID                   uint   `gorm:"primaryKey"`
 	UserID               string `gorm:"index"`
 	ProductCode          string
-	PayPalSubscriptionID string `gorm:"uniqueIndex"`
+	PayPalSubscriptionID string `gorm:"size:64;uniqueIndex"`
 	Status               string // ACTIVE, CANCELLED, SUSPENDED
 	StartTime            time.Time
 	NextBillingTime      *time.Time
@@ -82,7 +82,7 @@ type Merchant struct {
 	PayPalMerchantID   string
 	PayPalAccessToken  string
 	PayPalRefreshToken string
-	TokenExpiresAt     time.Time
+	TokenExpiresAt     *time.Time
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

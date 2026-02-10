@@ -7,7 +7,6 @@ type Item struct {
 
 type PayRequest struct {
 	Items []*Item `json:"items"`
-	Vault bool    `json:"vault"`
 }
 
 type PayResponse struct {

@@ -16,9 +16,9 @@ import (
 type PaypalService interface {
 	Connect(merchantID string) string
 	ExchangeAuthCode(ctx context.Context, code string) (*model.PayPalToken, error)
-	Pay(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error)
-	PayAgain(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error)
-	CaptureOrder(ctx context.Context, orderID string) error
+	Pay(ctx context.Context, merchantID string, userID string, items []*dto.Item) (*dto.PayResponse, error)
+	PayAgain(ctx context.Context, merchantID string, userID string, items []*dto.Item) (*dto.PayResponse, error)
+	CaptureOrder(ctx context.Context, merchantID string, orderID string) error
 	HandleWebhook(ctx context.Context, headers http.Header, body []byte) error
 	CheckUserHaveSavedPayment(ctx context.Context, userID string) (bool, error)
 	SubscribeSubscription(ctx context.Context, userID string, productCode string) (approveURL string, err error)
@@ -71,7 +71,7 @@ func (s *paypalServiceImpl) ExchangeAuthCode(ctx context.Context, code string) (
 	return s.paypalClient.ExchangeAuthCode(ctx, code)
 }
 
-func (s *paypalServiceImpl) Pay(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error) {
+func (s *paypalServiceImpl) Pay(ctx context.Context, merchantID string, userID string, items []*dto.Item) (*dto.PayResponse, error) {
 	productIDs := make([]string, len(items))
 	itemQuantityMap := make(map[string]int32)
 	for i, item := range items {
@@ -105,7 +105,12 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, userID string, items []*dto
 		}
 	}
 
-	resp, err := s.paypalClient.CreateOrderForApproval(ctx, s.serviceBaseUrl, userID, "USD", totalAmount)
+	merchant, err := s.merchantRepo.Get(ctx, merchantID)
+	if err != nil {
+		return nil, fmt.Errorf("merchant not found")
+	}
+
+	resp, err := s.paypalClient.CreateOrderForApproval(ctx, s.serviceBaseUrl, userID, "USD", totalAmount, merchant.PayPalAccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("paypal api create order: %w", err)
 	}
@@ -139,7 +144,7 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, userID string, items []*dto
 	}, nil
 }
 
-func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error) {
+func (s *paypalServiceImpl) PayAgain(ctx context.Context, merchantID string, userID string, items []*dto.Item) (*dto.PayResponse, error) {
 	productIDs := make([]string, len(items))
 	itemQuantityMap := make(map[string]int32)
 
@@ -178,7 +183,12 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 		}
 	}
 
-	orderID, err := s.paypalClient.CreateOrderWithVault(ctx, userID, vaultID, "USD", totalAmount)
+	merchant, err := s.merchantRepo.Get(ctx, merchantID)
+	if err != nil {
+		return nil, fmt.Errorf("merchant not found")
+	}
+
+	orderID, err := s.paypalClient.CreateOrderWithVault(ctx, userID, vaultID, "USD", totalAmount, merchant.PayPalAccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("paypal create order with vault: %w", err)
 	}
@@ -210,8 +220,13 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 	}, nil
 }
 
-func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) error {
-	_, err := s.paypalClient.CaptureOrder(ctx, orderID)
+func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, merchantID string, orderID string) error {
+	merchant, err := s.merchantRepo.Get(ctx, merchantID)
+	if err != nil {
+		return fmt.Errorf("merchant not found")
+	}
+
+	_, err = s.paypalClient.CaptureOrder(ctx, orderID, merchant.PayPalAccessToken)
 	if err != nil {
 		return fmt.Errorf("paypal api capture order: %w", err)
 	}

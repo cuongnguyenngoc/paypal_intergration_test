@@ -27,11 +27,11 @@ func NewMerchantRepository(db *gorm.DB) MerchantRepository {
 func (r *merchantRepoImpl) Upsert(ctx context.Context, merchant *model.Merchant) error {
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"paypal_merchant_id":   merchant.PayPalMerchantID,
-			"paypal_access_token":  merchant.PayPalAccessToken,
-			"paypal_refresh_token": merchant.PayPalRefreshToken,
-			"token_expires_at":     merchant.TokenExpiresAt,
-			"updated_at":           time.Now(),
+			"pay_pal_merchant_id":   merchant.PayPalMerchantID,
+			"pay_pal_access_token":  merchant.PayPalAccessToken,
+			"pay_pal_refresh_token": merchant.PayPalRefreshToken,
+			"token_expires_at":      merchant.TokenExpiresAt,
+			"updated_at":            time.Now(),
 		}),
 	}).Create(&merchant).Error
 }

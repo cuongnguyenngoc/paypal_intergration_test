@@ -10,7 +10,7 @@ import (
 )
 
 type MerchantService interface {
-	CreateMerchant(ctx context.Context, name string) error
+	CreateMerchant(ctx context.Context, name string) (string, error)
 	UpdatePaypalTokens(ctx context.Context, merchantID string, tokens *model.PayPalToken) error
 	GetMerchant(ctx context.Context, id string) (*model.Merchant, error)
 }
@@ -27,19 +27,26 @@ func NewMerchantService(
 	}
 }
 
-func (s *merchantServiceImpl) CreateMerchant(ctx context.Context, name string) error {
-	return s.merchantRepo.Upsert(ctx, &model.Merchant{
+func (s *merchantServiceImpl) CreateMerchant(ctx context.Context, name string) (string, error) {
+	merchant := &model.Merchant{
 		ID:   uuid.NewString(),
 		Name: name,
-	})
+	}
+	err := s.merchantRepo.Upsert(ctx, merchant)
+	if err != nil {
+		return "", err
+	}
+
+	return merchant.ID, nil
 }
 
 func (s *merchantServiceImpl) UpdatePaypalTokens(ctx context.Context, merchantID string, tokens *model.PayPalToken) error {
+	expiresAt := time.Now().Add(time.Duration(tokens.ExpiresIn) * time.Second)
 	return s.merchantRepo.Upsert(ctx, &model.Merchant{
 		ID:                 merchantID,
 		PayPalAccessToken:  tokens.AccessToken,
 		PayPalRefreshToken: tokens.RefreshToken,
-		TokenExpiresAt:     time.Now().Add(time.Duration(tokens.ExpiresIn) * time.Second),
+		TokenExpiresAt:     &expiresAt,
 	})
 }
 

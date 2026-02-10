@@ -26,12 +26,12 @@ func (h *MerchantHandler) CreateMerchant(c echo.Context) error {
 		return err
 	}
 
-	err := h.merchantService.CreateMerchant(ctx, req.MerchantName)
+	merchantID, err := h.merchantService.CreateMerchant(ctx, req.MerchantName)
 	if err != nil {
 		return err
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{
-		"message": "create merchant successfully",
+		"id": merchantID,
 	})
 }
