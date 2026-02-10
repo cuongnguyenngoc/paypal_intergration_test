@@ -4,6 +4,8 @@ import (
 	"paypal-integration-demo/internal/handler"
 	"paypal-integration-demo/internal/service"
 
+	internalMiddleware "paypal-integration-demo/internal/middleware"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -39,21 +41,26 @@ func NewServer(paypalService service.PaypalService, userService service.UserServ
 func (s *Server) setupRoutes() {
 	api := s.echo.Group("/api")
 
+	// -------- public --------
 	api.GET("/health", func(c echo.Context) error {
-		return c.JSON(200, map[string]string{
-			"status": "ok",
-		})
+		return c.JSON(200, map[string]string{"status": "ok"})
 	})
 
-	api.GET("/inventories", s.userHandler.GetUsersInventory)
+	// -------- authenticated --------
+	auth := api.Group("", internalMiddleware.AuthMiddleware())
 
-	paypal := api.Group("/paypal")
+	auth.GET("/inventories", s.userHandler.GetUsersInventory)
 
+	// -------- paypal --------
+	paypal := auth.Group("/paypal")
 	paypal.POST("/pay", s.paypalHandler.Pay)
-	paypal.GET("/success", s.paypalHandler.HandleSuccess)
-	paypal.POST("/webhook", s.paypalHandler.PayPalWebhook)
-	paypal.GET("/have-saved-payment", s.paypalHandler.CheckUserHaveSavedPayment)
 	paypal.POST("/pay-again", s.paypalHandler.PayAgain)
+	paypal.GET("/have-saved-payment", s.paypalHandler.CheckUserHaveSavedPayment)
+
+	// -------- paypal webhooks / callbacks --------
+	paypalPublic := api.Group("/paypal")
+	paypalPublic.GET("/success", s.paypalHandler.HandleSuccess)
+	paypalPublic.POST("/webhook", s.paypalHandler.PayPalWebhook)
 }
 
 func (s *Server) Start(address string) error {

@@ -14,7 +14,7 @@ import (
 )
 
 type PaypalService interface {
-	Pay(ctx context.Context, items []*dto.Item) (*dto.PayResponse, error)
+	Pay(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error)
 	PayAgain(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error)
 	CaptureOrder(ctx context.Context, orderID string) error
 	HandleWebhook(ctx context.Context, headers http.Header, body []byte) error
@@ -54,7 +54,7 @@ func NewPaypalService(
 	}
 }
 
-func (s *paypalServiceImpl) Pay(ctx context.Context, items []*dto.Item) (*dto.PayResponse, error) {
+func (s *paypalServiceImpl) Pay(ctx context.Context, userID string, items []*dto.Item) (*dto.PayResponse, error) {
 	productIDs := make([]string, len(items))
 	itemQuantityMap := make(map[string]int32)
 	for i, item := range items {
@@ -88,7 +88,7 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, items []*dto.Item) (*dto.Pa
 		}
 	}
 
-	resp, err := s.paypalClient.CreateOrderForApproval(ctx, s.serviceBaseUrl, "USD", totalAmount)
+	resp, err := s.paypalClient.CreateOrderForApproval(ctx, s.serviceBaseUrl, userID, "USD", totalAmount)
 	if err != nil {
 		return nil, fmt.Errorf("paypal api create order: %w", err)
 	}
@@ -100,6 +100,7 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, items []*dto.Item) (*dto.Pa
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		err = s.orderRepo.Create(tx, &model.Order{
 			OrderID:  resp.OrderID,
+			UserID:   userID,
 			Status:   "CREATED",
 			Amount:   totalAmount,
 			Currency: "USD",
@@ -160,7 +161,7 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 		}
 	}
 
-	orderID, err := s.paypalClient.CreateOrderWithVault(ctx, vaultID, "USD", totalAmount)
+	orderID, err := s.paypalClient.CreateOrderWithVault(ctx, userID, vaultID, "USD", totalAmount)
 	if err != nil {
 		return nil, fmt.Errorf("paypal create order with vault: %w", err)
 	}
@@ -172,7 +173,7 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := s.orderRepo.Create(tx, &model.Order{
 			OrderID:  orderID,
-			PayerID:  userID,
+			UserID:   userID,
 			Status:   "COMPLETED", // paypal auto capture order when create order with vault so order status should be compeleted
 			Amount:   totalAmount,
 			Currency: "USD",
@@ -193,13 +194,13 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, userID string, items [
 }
 
 func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) error {
-	resp, err := s.paypalClient.CaptureOrder(ctx, orderID)
+	_, err := s.paypalClient.CaptureOrder(ctx, orderID)
 	if err != nil {
 		return fmt.Errorf("paypal api capture order: %w", err)
 	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return s.orderRepo.MarkCompleted(tx, orderID, resp.PayerID)
+		return s.orderRepo.MarkCompleted(tx, orderID)
 	})
 }
 
@@ -257,7 +258,7 @@ func (s *paypalServiceImpl) handleOrderPaid(ctx context.Context, eventPayload *m
 		// grant items to user inventory
 		for _, item := range orderItems {
 			err = s.inventoryRepo.Upsert(ctx, tx, &model.UserInventory{
-				UserID:    orderInfo.PayerID,
+				UserID:    orderInfo.UserID,
 				ProductID: item.ProductID,
 				Quantity:  item.Quantity,
 			})
@@ -273,17 +274,22 @@ func (s *paypalServiceImpl) handleOrderPaid(ctx context.Context, eventPayload *m
 func (s *paypalServiceImpl) handlePaymentTokenCreated(ctx context.Context, event *model.PayPalWebhookEvent) error {
 	resource := event.Resource
 	if resource.ID == "" {
-		return fmt.Errorf("missing vault_id in PAYMENT.TOKEN.CREATED")
+		return fmt.Errorf("missing vault_id in PAYMENT.TOKEN.CREATED event payload")
 	}
 
-	userID := event.Resource.PaymentResource.PayPal.PayerID
-	if userID == "" {
-		return fmt.Errorf("missing payer_id in PAYMENT.TOKEN.CREATED")
+	orderID := resource.Metadata.OrderID
+	if orderID == "" {
+		return fmt.Errorf("missing user id in PAYMENT.TOKEN.CREATED event payload")
+	}
+
+	orderInfo, err := s.orderRepo.FindByOrderID(orderID)
+	if err != nil {
+		return fmt.Errorf("mark order paid: %w", err)
 	}
 
 	// Upsert user vault info
-	err := s.vaultRepo.Create(ctx, &model.UserVault{
-		UserID:  userID,
+	err = s.vaultRepo.Create(ctx, &model.UserVault{
+		UserID:  orderInfo.UserID,
 		VaultID: resource.ID,
 	})
 	if err != nil {

@@ -51,6 +51,10 @@ type PaymentSource struct {
 	PayPal Payer `json:"paypal"`
 }
 
+type PayPalMetadata struct {
+	OrderID string `json:"order_id"`
+}
+
 type PaypalResource struct {
 	ID                string            `json:"id"`
 	Intent            string            `json:"intent"`
@@ -58,7 +62,10 @@ type PaypalResource struct {
 	Payer             Payer             `json:"payer"`
 	PurchaseUnits     []PurchaseUnit    `json:"purchase_units"`
 	SupplementaryData SupplementaryData `json:"supplementary_data"`
-	PaymentResource   PaymentSource     `json:"payment_source"`
+
+	// Vault-specific
+	Metadata        PayPalMetadata `json:"metadata"`
+	PaymentResource PaymentSource  `json:"payment_source"`
 }
 
 type PayPalWebhookEvent struct {

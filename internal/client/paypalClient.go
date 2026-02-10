@@ -16,8 +16,8 @@ import (
 )
 
 type PaypalClient interface {
-	CreateOrderForApproval(ctx context.Context, serviceBaseUrl string, currency string, cost int32) (*HandleOrderResponse, error)
-	CreateOrderWithVault(ctx context.Context, vaultID string, currency string, cost int32) (string, error)
+	CreateOrderForApproval(ctx context.Context, serviceBaseUrl string, userID string, currency string, cost int32) (*HandleOrderResponse, error)
+	CreateOrderWithVault(ctx context.Context, userID string, vaultID string, currency string, cost int32) (string, error)
 	CaptureOrder(ctx context.Context, orderID string) (*HandleOrderResponse, error)
 	VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error
 }
@@ -76,11 +76,12 @@ func (c *paypalClientImpl) getAccessToken() (string, error) {
 	return res.AccessToken, nil
 }
 
-func (c *paypalClientImpl) CreateOrderForApproval(ctx context.Context, serviceBaseUrl string, currency string, cost int32) (*HandleOrderResponse, error) {
+func (c *paypalClientImpl) CreateOrderForApproval(ctx context.Context, serviceBaseUrl string, userID string, currency string, cost int32) (*HandleOrderResponse, error) {
 	payload := map[string]interface{}{
 		"intent": "CAPTURE",
 		"purchase_units": []map[string]interface{}{
 			{
+				"custom_id": userID,
 				"amount": map[string]string{
 					"currency_code": currency,
 					"value":         fmt.Sprintf("%.2f", float64(cost)),
@@ -119,11 +120,12 @@ func (c *paypalClientImpl) CreateOrderForApproval(ctx context.Context, serviceBa
 	}, nil
 }
 
-func (c *paypalClientImpl) CreateOrderWithVault(ctx context.Context, vaultID string, currency string, cost int32) (string, error) {
+func (c *paypalClientImpl) CreateOrderWithVault(ctx context.Context, userID string, vaultID string, currency string, cost int32) (string, error) {
 	payload := map[string]interface{}{
 		"intent": "CAPTURE",
 		"purchase_units": []map[string]interface{}{
 			{
+				"custom_id": userID,
 				"amount": map[string]string{
 					"currency_code": currency,
 					"value":         fmt.Sprintf("%.2f", float64(cost)),

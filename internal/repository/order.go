@@ -10,7 +10,7 @@ import (
 type OrderRepository interface {
 	Create(tx *gorm.DB, order *model.Order) error
 	FindByOrderID(orderID string) (*model.Order, error)
-	MarkCompleted(tx *gorm.DB, orderID string, payerID string) error
+	MarkCompleted(tx *gorm.DB, orderID string) error
 	MarkPaid(tx *gorm.DB, orderID string) (*model.Order, error)
 	IsPaid(orderID string) (bool, error)
 	CreateOrderItems(tx *gorm.DB, items []*model.OrderItem) error
@@ -44,19 +44,17 @@ func (r *orderRepoImpl) FindByOrderID(orderID string) (*model.Order, error) {
 	return &order, nil
 }
 
-func (r *orderRepoImpl) MarkCompleted(tx *gorm.DB, orderID string, payerID string) error {
+func (r *orderRepoImpl) MarkCompleted(tx *gorm.DB, orderID string) error {
 	return tx.Model(&model.Order{}).
 		Where(`
 			order_id = ?
 			AND status IN ?
-			AND (payer_id = '' OR payer_id IS NULL)
 		`,
 			orderID,
 			[]string{"CREATED", "APPROVED"},
 		).
 		Updates(map[string]interface{}{
 			"status":     "COMPLETED",
-			"payer_id":   payerID,
 			"updated_at": time.Now(),
 		}).Error
 }

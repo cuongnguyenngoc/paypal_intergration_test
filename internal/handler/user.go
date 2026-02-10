@@ -20,7 +20,9 @@ func NewUserHandler(userService service.UserService) *UserHandler {
 func (h *UserHandler) GetUsersInventory(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	inventories, err := h.userService.GetInventories(ctx)
+	userID := c.Get("user_id").(string)
+
+	inventories, err := h.userService.GetInventory(ctx, userID)
 	if err != nil {
 		return err
 	}

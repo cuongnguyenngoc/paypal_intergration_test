@@ -7,7 +7,7 @@ import (
 )
 
 type UserService interface {
-	GetInventories(ctx context.Context) ([]*model.UserInventory, error)
+	GetInventory(ctx context.Context, userID string) ([]*model.UserInventory, error)
 }
 
 type userServiceImpl struct {
@@ -22,6 +22,6 @@ func NewUserService(
 	}
 }
 
-func (s *userServiceImpl) GetInventories(ctx context.Context) ([]*model.UserInventory, error) {
-	return s.inventoryRepo.Get(ctx)
+func (s *userServiceImpl) GetInventory(ctx context.Context, userID string) ([]*model.UserInventory, error) {
+	return s.inventoryRepo.Get(ctx, userID)
 }

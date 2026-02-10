@@ -10,8 +10,6 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-const userID = "RR837NYEPXP36"
-
 type PaypalHandler struct {
 	paypalService service.PaypalService
 }
@@ -25,12 +23,17 @@ func NewPaypalHandler(paypalService service.PaypalService) *PaypalHandler {
 func (h *PaypalHandler) Pay(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	var req dto.PayRequest
-	if err := c.Bind(&req); err != nil {
-		return err
+	userID := c.Get("user_id").(string)
+	if userID == "" {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized to use this endpoint")
 	}
 
-	result, err := h.paypalService.Pay(ctx, req.Items)
+	var req dto.PayRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid req body")
+	}
+
+	result, err := h.paypalService.Pay(ctx, userID, req.Items)
 	if err != nil {
 		return err
 	}
@@ -40,6 +43,11 @@ func (h *PaypalHandler) Pay(c echo.Context) error {
 
 func (h *PaypalHandler) PayAgain(c echo.Context) error {
 	ctx := c.Request().Context()
+
+	userID := c.Get("user_id").(string)
+	if userID == "" {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized to use this endpoint")
+	}
 
 	var req dto.PayRequest
 	if err := c.Bind(&req); err != nil {
@@ -129,6 +137,11 @@ func (h *PaypalHandler) PayPalWebhook(c echo.Context) error {
 
 func (h *PaypalHandler) CheckUserHaveSavedPayment(c echo.Context) error {
 	ctx := c.Request().Context()
+
+	userID := c.Get("user_id").(string)
+	if userID == "" {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized to use this endpoint")
+	}
 
 	haveSaved, err := h.paypalService.CheckUserHaveSavedPayment(ctx, userID)
 	if err != nil {

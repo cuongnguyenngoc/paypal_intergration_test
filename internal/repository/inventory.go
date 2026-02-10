@@ -11,7 +11,7 @@ import (
 
 type InventoryRepository interface {
 	Upsert(ctx context.Context, tx *gorm.DB, inventory *model.UserInventory) error
-	Get(ctx context.Context) ([]*model.UserInventory, error)
+	Get(ctx context.Context, userID string) ([]*model.UserInventory, error)
 }
 
 type inventoryRepoImpl struct {
@@ -34,10 +34,12 @@ func (r *inventoryRepoImpl) Upsert(ctx context.Context, tx *gorm.DB, inventory *
 	}).Create(&inventory).Error
 }
 
-func (r *inventoryRepoImpl) Get(ctx context.Context) ([]*model.UserInventory, error) {
+func (r *inventoryRepoImpl) Get(ctx context.Context, userID string) ([]*model.UserInventory, error) {
 	var inventories []*model.UserInventory
 
-	err := r.db.WithContext(ctx).Find(&inventories).Error
+	err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Find(&inventories).Error
 	if err != nil {
 		return nil, err
 	}
