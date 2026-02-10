@@ -44,6 +44,7 @@ func main() {
 	webhookEventRepo := repository.NewWebhookEventRepository(db)
 	inventoryRepo := repository.NewInventoryRepository(db)
 	vaultRepo := repository.NewVaultRepository(db)
+	subscriptionRepo := repository.NewSubscriptionRepository(db)
 
 	paypalService := service.NewPaypalService(
 		db,
@@ -53,6 +54,7 @@ func main() {
 		webhookEventRepo,
 		inventoryRepo,
 		vaultRepo,
+		subscriptionRepo,
 	)
 	userService := service.NewUserService(inventoryRepo)
 
