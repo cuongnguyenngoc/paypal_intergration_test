@@ -17,12 +17,15 @@ import (
 type PaypalService interface {
 	Connect(merchantID string) string
 	ExchangeAuthCode(ctx context.Context, code string) (*model.PayPalToken, error)
+
 	Pay(ctx context.Context, merchantID string, userID string, items []*dto.Item) (*dto.PayResponse, error)
 	PayAgain(ctx context.Context, merchantID string, userID string, items []*dto.Item) (*dto.PayResponse, error)
 	CaptureOrder(ctx context.Context, orderID string) error
 	HandleWebhook(ctx context.Context, headers http.Header, body []byte) error
 	CheckUserHaveSavedPayment(ctx context.Context, userID string) (bool, error)
-	SubscribeSubscription(ctx context.Context, userID string, productCode string) (approveURL string, err error)
+
+	SetExistingProductsSubPlan(ctx context.Context, merchantID string) error
+	SubscribeSubscription(ctx context.Context, userID string, productCode string, merchantID string) (approveURL string, err error)
 }
 
 type paypalServiceImpl struct {
@@ -367,8 +370,21 @@ func (s *paypalServiceImpl) handleSubscriptionCancelled(ctx context.Context, eve
 	return s.subscriptionRepo.CancelSubscription(ctx, subID)
 }
 
-func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID string, productCode string) (approveURL string, err error) {
-	plan, err := s.subscriptionRepo.GetPaypalPlanByProductCode(ctx, productCode)
+func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID string, productCode string, merchantID string) (approveURL string, err error) {
+	product, err := s.productRepo.FindByID(productCode)
+	if err != nil {
+		return "", err
+	}
+	if product.Type != string(model.SUBSCRIPTION) {
+		return "", fmt.Errorf("product is not a subscription")
+	}
+
+	plan, err := s.subscriptionRepo.GetSubPlanByProductID(ctx, merchantID, product.ID)
+	if err != nil {
+		return "", err
+	}
+
+	merchantAccessToken, err := s.getValidMerchantAccessToken(ctx, merchantID)
 	if err != nil {
 		return "", err
 	}
@@ -378,6 +394,7 @@ func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID st
 		s.serviceBaseUrl,
 		plan.PayPalPlanID,
 		userID,
+		merchantAccessToken,
 	)
 	if err != nil {
 		return "", err
@@ -432,4 +449,56 @@ func (s *paypalServiceImpl) getValidMerchantAccessToken(ctx context.Context, mer
 	}
 
 	return token.AccessToken, nil
+}
+
+func (s *paypalServiceImpl) SetExistingProductsSubPlan(ctx context.Context, merchantID string) error {
+	subscriptionProducts, err := s.productRepo.GetByType(model.SUBSCRIPTION)
+	if err != nil {
+		return err
+	}
+
+	for _, product := range subscriptionProducts {
+		err = s.setupProductSubPlan(ctx, merchantID, product)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *paypalServiceImpl) setupProductSubPlan(ctx context.Context, merchantID string, product *model.Product) error {
+	merchantToken, err := s.getValidMerchantAccessToken(ctx, merchantID)
+	if err != nil {
+		return err
+	}
+
+	// 1. Create PayPal Product
+	ppProductID, err := s.paypalClient.CreateSubscriptionProduct(
+		ctx,
+		merchantToken,
+		product,
+	)
+	if err != nil {
+		return err
+	}
+
+	// 2. Create PayPal Plan
+	ppPlanID, err := s.paypalClient.CreateSubscriptionPlan(
+		ctx,
+		merchantToken,
+		ppProductID,
+		product,
+	)
+	if err != nil {
+		return err
+	}
+
+	// 3. Store mapping
+	return s.subscriptionRepo.StoreSubPlan(ctx, &model.SubscriptionPlan{
+		MerchantID:      merchantID,
+		ProductID:       product.ID,
+		PayPalProductID: ppProductID,
+		PayPalPlanID:    ppPlanID,
+	})
 }

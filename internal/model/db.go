@@ -2,11 +2,20 @@ package model
 
 import "time"
 
+type ProductType string
+
+const (
+	SUBSCRIPTION ProductType = "SUBSCRIPTION"
+	ONE_TIME     ProductType = "ONE_TIME"
+)
+
 type Product struct {
-	ID       string `gorm:"primaryKey;size:64;not null"` // product sku
-	Price    int32  `gorm:"not null"`
-	Currency string `gorm:"size:8;not null"`
-	Type     string `gorm:"size:32;index;not null"` // ONE_TIME, SUBSCRIPTION
+	ID          string `gorm:"primaryKey;size:64;not null"` // product sku
+	Name        string
+	Description string
+	Price       int32  `gorm:"not null"`
+	Currency    string `gorm:"size:8;not null"`
+	Type        string `gorm:"size:32;index;not null"` // ONE_TIME, SUBSCRIPTION
 }
 
 type Order struct {
@@ -58,8 +67,9 @@ type UserVault struct {
 	UpdatedAt time.Time
 }
 
-type PayPalPlan struct {
-	ProductCode     string `gorm:"primaryKey"` // vip_monthly
+type SubscriptionPlan struct {
+	MerchantID      string `gorm:"primaryKey"`
+	ProductID       string `gorm:"primaryKey"` // vip_monthly
 	PayPalProductID string
 	PayPalPlanID    string
 }

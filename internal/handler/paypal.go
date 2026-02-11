@@ -60,6 +60,8 @@ func (h *PaypalHandler) OAuthCallback(c echo.Context) error {
 		return err
 	}
 
+	h.paypalService.SetExistingProductsSubPlan(ctx, merchantID) // silent setup subscription products for merchant when they connect to their paypal business account
+
 	return c.String(http.StatusOK, "PayPal connected successfully")
 }
 
@@ -199,12 +201,17 @@ func (h *PaypalHandler) SubscribeSubscription(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized to use this endpoint")
 	}
 
+	merchantID, err := merchantIDFromHeader(c)
+	if err != nil {
+		return err
+	}
+
 	var req dto.SubscribeRequest
 	if err := c.Bind(&req); err != nil {
 		return err
 	}
 
-	approveURL, err := h.paypalService.SubscribeSubscription(ctx, userID, req.ItemID)
+	approveURL, err := h.paypalService.SubscribeSubscription(ctx, userID, req.ItemID, merchantID)
 	if err != nil {
 		return err
 	}

@@ -9,7 +9,8 @@ import (
 )
 
 type SubscriptionRepository interface {
-	GetPaypalPlanByProductCode(ctx context.Context, productCode string) (*model.PayPalPlan, error)
+	GetSubPlanByProductID(ctx context.Context, merchantID string, productID string) (*model.SubscriptionPlan, error)
+	StoreSubPlan(ctx context.Context, plan *model.SubscriptionPlan) error
 
 	CreateSubscription(ctx context.Context, sub *model.UserSubscription) error
 	ActivateSubscription(ctx context.Context, subscriptionID string, start time.Time, next *time.Time) error
@@ -27,10 +28,10 @@ func NewSubscriptionRepository(db *gorm.DB) SubscriptionRepository {
 	}
 }
 
-func (r *subscriptionRepoImpl) GetPaypalPlanByProductCode(ctx context.Context, productCode string) (*model.PayPalPlan, error) {
-	var plan model.PayPalPlan
+func (r *subscriptionRepoImpl) GetSubPlanByProductID(ctx context.Context, merchantID string, productID string) (*model.SubscriptionPlan, error) {
+	var plan model.SubscriptionPlan
 	err := r.db.WithContext(ctx).
-		Where("product_code = ?", productCode).
+		Where("merchant_id = ? AND product_id = ?", merchantID, productID).
 		First(&plan).
 		Error
 
@@ -39,6 +40,10 @@ func (r *subscriptionRepoImpl) GetPaypalPlanByProductCode(ctx context.Context, p
 	}
 
 	return &plan, nil
+}
+
+func (r *subscriptionRepoImpl) StoreSubPlan(ctx context.Context, plan *model.SubscriptionPlan) error {
+	return r.db.WithContext(ctx).Create(plan).Error
 }
 
 func (r *subscriptionRepoImpl) CreateSubscription(ctx context.Context, sub *model.UserSubscription) error {

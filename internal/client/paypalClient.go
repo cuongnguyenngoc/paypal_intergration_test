@@ -26,7 +26,10 @@ type PaypalClient interface {
 	CreateOrderWithVault(ctx context.Context, userID string, vaultID string, currency string, cost int32, merchantToken string) (string, error)
 	CaptureOrder(ctx context.Context, orderID string, merchantToken string) (*HandleOrderResponse, error)
 	VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error
-	CreateUserSubscription(ctx context.Context, serviceBaseUrl string, planID string, userID string) (subscriptionID string, approveURL string, err error)
+	CreateUserSubscription(ctx context.Context, serviceBaseUrl string, planID string, userID string, merchantAccessToken string) (subscriptionID string, approveURL string, err error)
+
+	CreateSubscriptionProduct(ctx context.Context, merchantToken string, product *model.Product) (string, error)
+	CreateSubscriptionPlan(ctx context.Context, merchantToken string, paypalProductID string, product *model.Product) (string, error)
 }
 
 type paypalClientImpl struct {
@@ -368,12 +371,7 @@ func (c *paypalClientImpl) VerifyWebhookSignature(ctx context.Context, headers h
 	return nil
 }
 
-func (c *paypalClientImpl) CreateUserSubscription(ctx context.Context, serviceBaseUrl string, planID string, userID string) (subscriptionID string, approveURL string, err error) {
-	accessToken, err := c.getAccessToken()
-	if err != nil {
-		return "", "", err
-	}
-
+func (c *paypalClientImpl) CreateUserSubscription(ctx context.Context, serviceBaseUrl string, planID string, userID string, merchantAccessToken string) (subscriptionID string, approveURL string, err error) {
 	payload := map[string]interface{}{
 		"plan_id":   planID,
 		"custom_id": userID,
@@ -396,7 +394,7 @@ func (c *paypalClientImpl) CreateUserSubscription(ctx context.Context, serviceBa
 		return "", "", err
 	}
 
-	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Authorization", "Bearer "+merchantAccessToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
@@ -421,6 +419,128 @@ func (c *paypalClientImpl) CreateUserSubscription(ctx context.Context, serviceBa
 	}
 
 	return result.ID, approveURL, nil
+}
+
+func (c *paypalClientImpl) CreateSubscriptionProduct(ctx context.Context, merchantToken string, product *model.Product) (string, error) {
+	body := map[string]interface{}{
+		"name":        product.Name,
+		"description": product.Description,
+		"type":        "SERVICE", // usually SERVICE for subscriptions
+		"category":    "SOFTWARE",
+	}
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		c.baseApiURL+"/v1/catalogs/products",
+		bytes.NewBuffer(jsonBody),
+	)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+merchantToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("paypal create product failed: %s", string(b))
+	}
+
+	var result struct {
+		ID string `json:"id"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	return result.ID, nil
+}
+
+func (c *paypalClientImpl) CreateSubscriptionPlan(ctx context.Context, merchantToken string, paypalProductID string, product *model.Product) (string, error) {
+
+	body := map[string]interface{}{
+		"product_id":  paypalProductID,
+		"name":        product.Name,
+		"description": product.Description,
+		"billing_cycles": []map[string]interface{}{
+			{
+				"frequency": map[string]interface{}{
+					"interval_unit":  "MONTH",
+					"interval_count": 1,
+				},
+				"tenure_type":  "REGULAR",
+				"sequence":     1,
+				"total_cycles": 0, // 0 = infinite
+				"pricing_scheme": map[string]interface{}{
+					"fixed_price": map[string]interface{}{
+						"value":         fmt.Sprintf("%.2f", float64(product.Price)),
+						"currency_code": product.Currency,
+					},
+				},
+			},
+		},
+		"payment_preferences": map[string]interface{}{
+			"auto_bill_outstanding": true,
+			"setup_fee": map[string]interface{}{
+				"value":         "0",
+				"currency_code": product.Currency,
+			},
+			"setup_fee_failure_action":  "CONTINUE",
+			"payment_failure_threshold": 3,
+		},
+	}
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		c.baseApiURL+"/v1/billing/plans",
+		bytes.NewBuffer(jsonBody),
+	)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+merchantToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("paypal create plan failed: %s", string(b))
+	}
+
+	var result struct {
+		ID string `json:"id"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	return result.ID, nil
 }
 
 func _extractApproveURL(links []model.PaypalLink) string {
