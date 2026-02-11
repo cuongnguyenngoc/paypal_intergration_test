@@ -37,7 +37,7 @@ func (h *PaypalHandler) ConnectMerchant(c echo.Context) error {
 	merchantID := c.Param("merchantID")
 
 	url := h.paypalService.Connect(merchantID)
-	fmt.Println("url", url)
+
 	return c.Redirect(http.StatusFound, url)
 }
 
