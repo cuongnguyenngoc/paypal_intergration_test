@@ -77,7 +77,8 @@ type SubscriptionPlan struct {
 type UserSubscription struct {
 	ID                   uint   `gorm:"primaryKey"`
 	UserID               string `gorm:"index"`
-	ProductCode          string
+	ProductID            string
+	MerchantID           string
 	PayPalSubscriptionID string `gorm:"size:64;uniqueIndex"`
 	Status               string // ACTIVE, CANCELLED, SUSPENDED
 	StartTime            time.Time

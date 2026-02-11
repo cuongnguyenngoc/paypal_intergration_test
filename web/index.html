@@ -33,6 +33,23 @@
   Pay Again (Saved Payment)
 </button>
 
+<hr/>
+
+<!-- Subscription Section -->
+<div id="subscription-section" style="margin-bottom:20px; display:none;">
+  <h3>Subscription</h3>
+
+  <button id="subscribe-btn" onclick="subscribe()" disabled>
+    Subscribe (Monthly Plan)
+  </button>
+
+  <button id="cancel-sub-btn" onclick="cancelSubscription()" style="display:none;">
+    Cancel Subscription
+  </button>
+
+  <div id="subscription-status" style="margin-top:10px;"></div>
+</div>
+
 <script>
 const MERCHANT_KEY = "demo_merchant_id";
 
@@ -188,6 +205,68 @@ async function payAgain() {
   loadInventory();
 }
 
+async function subscribe() {
+  const res = await fetch("/api/paypal/subscription/subscribe", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...merchantHeader(),
+    },
+    body: JSON.stringify({
+      product_id: "vip_monthly",
+    })
+  });
+
+  if (!res.ok) {
+    alert("Failed to create subscription");
+    return;
+  }
+
+  const data = await res.json();
+  console.log("data.approval_url", data.approval_url)
+  if (data.approval_url) {
+    window.location.href = data.approval_url;
+  }
+}
+
+async function checkSubscriptionStatus() {
+  const res = await fetch("/api/paypal/subscription/status", {
+    method: "GET",
+    headers: merchantHeader(),
+  });
+
+  if (!res.ok) return;
+
+  const data = await res.json();
+
+  const statusDiv = document.getElementById("subscription-status");
+
+  if (data.active) {
+    statusDiv.innerHTML = "✅ Subscription Active";
+    document.getElementById("subscribe-btn").style.display = "none";
+    document.getElementById("cancel-sub-btn").style.display = "inline-block";
+  } else {
+    statusDiv.innerHTML = "❌ Not Subscribed";
+    document.getElementById("subscribe-btn").style.display = "inline-block";
+    document.getElementById("cancel-sub-btn").style.display = "none";
+  }
+}
+
+async function cancelSubscription() {
+  const res = await fetch("/api/paypal/subscription/cancel", {
+    method: "POST",
+    headers: merchantHeader(),
+  });
+
+  if (!res.ok) {
+    alert("Failed to cancel subscription");
+    return;
+  }
+
+  alert("Subscription cancelled");
+  checkSubscriptionStatus();
+}
+
 /* ---------------- Helpers ---------------- */
 
 function merchantHeader() {
@@ -198,6 +277,8 @@ function merchantHeader() {
 function enablePayments() {
   document.getElementById("pay-btn").disabled = false;
   document.getElementById("inventory-section").style.display = "block";
+  document.getElementById("subscription-section").style.display = "block";
+  document.getElementById("subscribe-btn").disabled = false;
 }
 
 /* ---------------- Init ---------------- */
@@ -214,5 +295,6 @@ function enablePayments() {
   enablePayments();
   loadInventory();
   checkSavedPayment();
+  checkSubscriptionStatus();
 })();
 </script>

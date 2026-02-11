@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"paypal-integration-demo/internal/dto"
 	"paypal-integration-demo/internal/service"
@@ -55,13 +56,21 @@ func (h *PaypalHandler) OAuthCallback(c echo.Context) error {
 		return err
 	}
 
-	err = h.merchantService.UpdatePaypalTokens(ctx, merchantID, token)
+	paypalMerchantID, err := h.paypalService.GetPaypalMerchantID(ctx, token.AccessToken)
+	fmt.Println("paypalMerchantID", paypalMerchantID, "err", err)
 	if err != nil {
 		return err
 	}
 
-	h.paypalService.SetExistingProductsSubPlan(ctx, merchantID) // silent setup subscription products for merchant when they connect to their paypal business account
+	err = h.merchantService.UpdatePaypalTokens(ctx, merchantID, paypalMerchantID, token)
+	if err != nil {
+		return err
+	}
 
+	err = h.paypalService.SetExistingProductsSubPlan(ctx, merchantID, paypalMerchantID, token.AccessToken) // silent setup subscription products for merchant when they connect to their paypal business account
+	if err != nil {
+		log.Println("set existing plans for merchant: %w", err)
+	}
 	return c.String(http.StatusOK, "PayPal connected successfully")
 }
 
@@ -196,11 +205,6 @@ func (h *PaypalHandler) CheckUserHaveSavedPayment(c echo.Context) error {
 func (h *PaypalHandler) SubscribeSubscription(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	userID := c.Get("user_id").(string)
-	if userID == "" {
-		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized to use this endpoint")
-	}
-
 	merchantID, err := merchantIDFromHeader(c)
 	if err != nil {
 		return err
@@ -211,12 +215,47 @@ func (h *PaypalHandler) SubscribeSubscription(c echo.Context) error {
 		return err
 	}
 
-	approveURL, err := h.paypalService.SubscribeSubscription(ctx, userID, req.ItemID, merchantID)
+	approveURL, err := h.paypalService.SubscribeSubscription(ctx, userID, req.ProductID, merchantID)
 	if err != nil {
 		return err
 	}
 
 	return c.JSON(http.StatusOK, &dto.SubscribeResponse{
 		ApprovalURL: approveURL,
+	})
+}
+
+func (h *PaypalHandler) GetSubscriptionStatus(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	merchantID, err := merchantIDFromHeader(c)
+	if err != nil {
+		return err
+	}
+
+	active, err := h.paypalService.HasActiveSubscription(ctx, userID, merchantID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]bool{
+		"active": active,
+	})
+}
+
+func (h *PaypalHandler) CancelSubscription(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	merchantID, err := merchantIDFromHeader(c)
+	if err != nil {
+		return err
+	}
+
+	if err := h.paypalService.CancelSubscription(ctx, userID, merchantID); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"status": "cancelled",
 	})
 }

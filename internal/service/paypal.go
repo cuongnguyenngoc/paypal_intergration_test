@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"paypal-integration-demo/internal/client"
@@ -17,6 +18,7 @@ import (
 type PaypalService interface {
 	Connect(merchantID string) string
 	ExchangeAuthCode(ctx context.Context, code string) (*model.PayPalToken, error)
+	GetPaypalMerchantID(ctx context.Context, merchantToken string) (string, error)
 
 	Pay(ctx context.Context, merchantID string, userID string, items []*dto.Item) (*dto.PayResponse, error)
 	PayAgain(ctx context.Context, merchantID string, userID string, items []*dto.Item) (*dto.PayResponse, error)
@@ -24,8 +26,10 @@ type PaypalService interface {
 	HandleWebhook(ctx context.Context, headers http.Header, body []byte) error
 	CheckUserHaveSavedPayment(ctx context.Context, userID string) (bool, error)
 
-	SetExistingProductsSubPlan(ctx context.Context, merchantID string) error
-	SubscribeSubscription(ctx context.Context, userID string, productCode string, merchantID string) (approveURL string, err error)
+	SetExistingProductsSubPlan(ctx context.Context, merchantID string, paypalMerchantID string, merchantAccessToken string) error
+	SubscribeSubscription(ctx context.Context, userID string, productID string, merchantID string) (approveURL string, err error)
+	CancelSubscription(ctx context.Context, userID string, merchantID string) error
+	HasActiveSubscription(ctx context.Context, userID string, merchantID string) (bool, error)
 }
 
 type paypalServiceImpl struct {
@@ -73,6 +77,10 @@ func (s *paypalServiceImpl) Connect(merchantID string) string {
 
 func (s *paypalServiceImpl) ExchangeAuthCode(ctx context.Context, code string) (*model.PayPalToken, error) {
 	return s.paypalClient.ExchangeAuthCode(ctx, code)
+}
+
+func (s *paypalServiceImpl) GetPaypalMerchantID(ctx context.Context, merchantToken string) (string, error) {
+	return s.paypalClient.GetMerchantUserInfo(ctx, merchantToken)
 }
 
 func (s *paypalServiceImpl) Pay(ctx context.Context, merchantID string, userID string, items []*dto.Item) (*dto.PayResponse, error) {
@@ -370,8 +378,8 @@ func (s *paypalServiceImpl) handleSubscriptionCancelled(ctx context.Context, eve
 	return s.subscriptionRepo.CancelSubscription(ctx, subID)
 }
 
-func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID string, productCode string, merchantID string) (approveURL string, err error) {
-	product, err := s.productRepo.FindByID(productCode)
+func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID string, productID string, merchantID string) (approveURL string, err error) {
+	product, err := s.productRepo.FindByID(productID)
 	if err != nil {
 		return "", err
 	}
@@ -383,11 +391,13 @@ func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID st
 	if err != nil {
 		return "", err
 	}
+	fmt.Println("plan", plan)
 
 	merchantAccessToken, err := s.getValidMerchantAccessToken(ctx, merchantID)
 	if err != nil {
 		return "", err
 	}
+	fmt.Println("merchantAccessToken", merchantAccessToken)
 
 	subID, approveURL, err := s.paypalClient.CreateUserSubscription(
 		ctx,
@@ -396,6 +406,7 @@ func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID st
 		userID,
 		merchantAccessToken,
 	)
+	fmt.Println("subID", subID, "err", err)
 	if err != nil {
 		return "", err
 	}
@@ -403,7 +414,7 @@ func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID st
 	// store as PENDING, will activate via webhook
 	err = s.subscriptionRepo.CreateSubscription(ctx, &model.UserSubscription{
 		UserID:               userID,
-		ProductCode:          productCode,
+		ProductID:            productID,
 		PayPalSubscriptionID: subID,
 		Status:               "PENDING",
 	})
@@ -412,6 +423,37 @@ func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID st
 	}
 
 	return approveURL, nil
+}
+
+func (s *paypalServiceImpl) HasActiveSubscription(ctx context.Context, userID string, merchantID string) (bool, error) {
+	sub, err := s.subscriptionRepo.GetActiveByUser(ctx, userID, merchantID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return sub.Status == "ACTIVE", nil
+}
+
+func (s *paypalServiceImpl) CancelSubscription(ctx context.Context, userID string, merchantID string) error {
+	// 1. Load active subscription
+	sub, err := s.subscriptionRepo.GetActiveByUser(ctx, userID, merchantID)
+	if err != nil {
+		return err
+	}
+
+	merchantToken, err := s.getValidMerchantAccessToken(ctx, merchantID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.paypalClient.CancelSubscription(ctx, merchantToken, sub.PayPalSubscriptionID); err != nil {
+		return err
+	}
+
+	return s.subscriptionRepo.CancelSubscription(ctx, sub.PayPalSubscriptionID)
 }
 
 func (s *paypalServiceImpl) getValidMerchantAccessToken(ctx context.Context, merchantID string) (string, error) {
@@ -451,14 +493,14 @@ func (s *paypalServiceImpl) getValidMerchantAccessToken(ctx context.Context, mer
 	return token.AccessToken, nil
 }
 
-func (s *paypalServiceImpl) SetExistingProductsSubPlan(ctx context.Context, merchantID string) error {
+func (s *paypalServiceImpl) SetExistingProductsSubPlan(ctx context.Context, merchantID string, paypalMerchantID string, merchantAccessToken string) error {
 	subscriptionProducts, err := s.productRepo.GetByType(model.SUBSCRIPTION)
 	if err != nil {
 		return err
 	}
 
 	for _, product := range subscriptionProducts {
-		err = s.setupProductSubPlan(ctx, merchantID, product)
+		err = s.setupProductSubPlan(ctx, merchantID, paypalMerchantID, merchantAccessToken, product)
 		if err != nil {
 			return err
 		}
@@ -467,32 +509,31 @@ func (s *paypalServiceImpl) SetExistingProductsSubPlan(ctx context.Context, merc
 	return nil
 }
 
-func (s *paypalServiceImpl) setupProductSubPlan(ctx context.Context, merchantID string, product *model.Product) error {
-	merchantToken, err := s.getValidMerchantAccessToken(ctx, merchantID)
-	if err != nil {
-		return err
-	}
-
+func (s *paypalServiceImpl) setupProductSubPlan(ctx context.Context, merchantID string, paypalMerchantID string, merchantAccessToken string, product *model.Product) error {
 	// 1. Create PayPal Product
 	ppProductID, err := s.paypalClient.CreateSubscriptionProduct(
 		ctx,
-		merchantToken,
+		paypalMerchantID,
+		merchantAccessToken,
 		product,
 	)
 	if err != nil {
 		return err
 	}
+	fmt.Println("ppProductID", ppProductID)
 
 	// 2. Create PayPal Plan
 	ppPlanID, err := s.paypalClient.CreateSubscriptionPlan(
 		ctx,
-		merchantToken,
+		paypalMerchantID,
+		merchantAccessToken,
 		ppProductID,
 		product,
 	)
 	if err != nil {
 		return err
 	}
+	fmt.Println("ppPlanID", ppPlanID)
 
 	// 3. Store mapping
 	return s.subscriptionRepo.StoreSubPlan(ctx, &model.SubscriptionPlan{

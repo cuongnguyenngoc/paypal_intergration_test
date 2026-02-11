@@ -22,14 +22,17 @@ type PaypalClient interface {
 	ExchangeAuthCode(ctx context.Context, code string) (*model.PayPalToken, error)
 	RefreshMerchantToken(ctx context.Context, refreshToken string) (*model.PayPalToken, error)
 
+	GetMerchantUserInfo(ctx context.Context, merchantToken string) (string, error)
+
 	CreateOrderForApproval(ctx context.Context, serviceBaseUrl string, userID string, currency string, cost int32, merchantToken string) (*HandleOrderResponse, error)
 	CreateOrderWithVault(ctx context.Context, userID string, vaultID string, currency string, cost int32, merchantToken string) (string, error)
 	CaptureOrder(ctx context.Context, orderID string, merchantToken string) (*HandleOrderResponse, error)
 	VerifyWebhookSignature(ctx context.Context, headers http.Header, body []byte) error
 	CreateUserSubscription(ctx context.Context, serviceBaseUrl string, planID string, userID string, merchantAccessToken string) (subscriptionID string, approveURL string, err error)
 
-	CreateSubscriptionProduct(ctx context.Context, merchantToken string, product *model.Product) (string, error)
-	CreateSubscriptionPlan(ctx context.Context, merchantToken string, paypalProductID string, product *model.Product) (string, error)
+	CreateSubscriptionProduct(ctx context.Context, paypalMerchantID string, merchantToken string, product *model.Product) (string, error)
+	CreateSubscriptionPlan(ctx context.Context, paypalMerchantID string, merchantToken string, paypalProductID string, product *model.Product) (string, error)
+	CancelSubscription(ctx context.Context, merchantAccessToken string, subscriptionID string) error
 }
 
 type paypalClientImpl struct {
@@ -94,7 +97,9 @@ func (c *paypalClientImpl) getAccessToken() (string, error) {
 
 func (c *paypalClientImpl) BuildConnectURL(merchantID string) string {
 	// scopes := "openid https://uri.paypal.com/services/payments"
-	scopes := "openid profile email https://uri.paypal.com/services/paypalattributes"
+	scopes := "openid profile email https://uri.paypal.com/services/paypalattributes " +
+		"https://uri.paypal.com/services/subscriptions " +
+		"https://uri.paypal.com/services/payments/realtimepayment "
 	return fmt.Sprintf(
 		"https://www.sandbox.paypal.com/connect?flowEntry=static&client_id=%s&scope=%s&redirect_uri=%s&state=%s&response_type=code",
 		c.paypalClientID,
@@ -168,6 +173,52 @@ func (c *paypalClientImpl) RefreshMerchantToken(ctx context.Context, refreshToke
 	}
 
 	return &token, nil
+}
+
+func (c *paypalClientImpl) GetMerchantUserInfo(ctx context.Context, merchantToken string) (string, error) {
+	// Request schema=openid to get the payer_id field
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		c.baseApiURL+"/v1/identity/openidconnect/userinfo?schema=openid",
+		nil,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+merchantToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("failed to get user info: %s", string(b))
+	}
+
+	var result struct {
+		PayerID string `json:"payer_id"`
+		UserID  string `json:"user_id"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	// PayPal usually returns the 13-character ID in 'payer_id'
+	if result.PayerID != "" {
+		return result.PayerID, nil
+	}
+
+	// Fallback: If payer_id is missing, it's the last part of the UserID URL
+	// e.g., "https://www.paypal.com"
+	parts := strings.Split(result.UserID, "/")
+	return parts[len(parts)-1], nil
 }
 
 func (c *paypalClientImpl) CreateOrderForApproval(ctx context.Context, serviceBaseUrl string, userID string, currency string, cost int32, merchantToken string) (*HandleOrderResponse, error) {
@@ -421,7 +472,21 @@ func (c *paypalClientImpl) CreateUserSubscription(ctx context.Context, serviceBa
 	return result.ID, approveURL, nil
 }
 
-func (c *paypalClientImpl) CreateSubscriptionProduct(ctx context.Context, merchantToken string, product *model.Product) (string, error) {
+func (c *paypalClientImpl) getAuthAssertionHeader(merchantPayerID string) string {
+	// Header: {"alg":"none"}
+	// Payload: {"iss":"YOUR_CLIENT_ID","payer_id":"MERCHANT_PAYER_ID"}
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none"}`))
+	payload := map[string]string{
+		"iss":      c.paypalClientID, // Your App's Client ID
+		"payer_id": merchantPayerID,
+	}
+	payloadBytes, _ := json.Marshal(payload)
+	payloadEncoded := base64.RawURLEncoding.EncodeToString(payloadBytes)
+
+	return fmt.Sprintf("%s.%s.", header, payloadEncoded)
+}
+
+func (c *paypalClientImpl) CreateSubscriptionProduct(ctx context.Context, paypalMerchantID string, merchantToken string, product *model.Product) (string, error) {
 	body := map[string]interface{}{
 		"name":        product.Name,
 		"description": product.Description,
@@ -444,8 +509,14 @@ func (c *paypalClientImpl) CreateSubscriptionProduct(ctx context.Context, mercha
 		return "", err
 	}
 
+	// accessToken, err := c.getAccessToken()
+	// if err != nil {
+	// 	return "", err
+	// }
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+merchantToken)
+	// req.Header.Set("PayPal-Auth-Assertion", c.getAuthAssertionHeader(paypalMerchantID))
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -469,7 +540,7 @@ func (c *paypalClientImpl) CreateSubscriptionProduct(ctx context.Context, mercha
 	return result.ID, nil
 }
 
-func (c *paypalClientImpl) CreateSubscriptionPlan(ctx context.Context, merchantToken string, paypalProductID string, product *model.Product) (string, error) {
+func (c *paypalClientImpl) CreateSubscriptionPlan(ctx context.Context, paypalMerchantID string, merchantToken string, paypalProductID string, product *model.Product) (string, error) {
 
 	body := map[string]interface{}{
 		"product_id":  paypalProductID,
@@ -518,8 +589,14 @@ func (c *paypalClientImpl) CreateSubscriptionPlan(ctx context.Context, merchantT
 		return "", err
 	}
 
+	// accessToken, err := c.getAccessToken()
+	// if err != nil {
+	// 	return "", err
+	// }
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+merchantToken)
+	// req.Header.Set("PayPal-Auth-Assertion", c.getAuthAssertionHeader(paypalMerchantID))
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -541,6 +618,40 @@ func (c *paypalClientImpl) CreateSubscriptionPlan(ctx context.Context, merchantT
 	}
 
 	return result.ID, nil
+}
+
+func (c *paypalClientImpl) CancelSubscription(ctx context.Context, merchantAccessToken string, subscriptionID string) error {
+	body := map[string]string{
+		"reason": "User requested cancellation",
+	}
+
+	b, _ := json.Marshal(body)
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		c.baseApiURL+"/v1/billing/subscriptions/"+subscriptionID+"/cancel",
+		bytes.NewBuffer(b),
+	)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+merchantAccessToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("paypal cancel subscription failed: %s", b)
+	}
+
+	return nil
 }
 
 func _extractApproveURL(links []model.PaypalLink) string {

@@ -15,7 +15,7 @@ type PayResponse struct {
 }
 
 type SubscribeRequest struct {
-	ItemID string `json:"item_id"`
+	ProductID string `json:"product_id"`
 }
 
 type SubscribeResponse struct {
