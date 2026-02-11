@@ -9,6 +9,7 @@ import (
 	"paypal-integration-demo/internal/dto"
 	"paypal-integration-demo/internal/model"
 	"paypal-integration-demo/internal/repository"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -105,12 +106,12 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, merchantID string, userID s
 		}
 	}
 
-	merchant, err := s.merchantRepo.Get(ctx, merchantID)
+	merchantAccessToken, err := s.getValidMerchantAccessToken(ctx, merchantID)
 	if err != nil {
-		return nil, fmt.Errorf("merchant not found")
+		return nil, err
 	}
 
-	resp, err := s.paypalClient.CreateOrderForApproval(ctx, s.serviceBaseUrl, userID, "USD", totalAmount, merchant.PayPalAccessToken)
+	resp, err := s.paypalClient.CreateOrderForApproval(ctx, s.serviceBaseUrl, userID, "USD", totalAmount, merchantAccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("paypal api create order: %w", err)
 	}
@@ -184,12 +185,12 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, merchantID string, use
 		}
 	}
 
-	merchant, err := s.merchantRepo.Get(ctx, merchantID)
+	merchantAccessToken, err := s.getValidMerchantAccessToken(ctx, merchantID)
 	if err != nil {
-		return nil, fmt.Errorf("merchant not found")
+		return nil, err
 	}
 
-	orderID, err := s.paypalClient.CreateOrderWithVault(ctx, userID, vaultID, "USD", totalAmount, merchant.PayPalAccessToken)
+	orderID, err := s.paypalClient.CreateOrderWithVault(ctx, userID, vaultID, "USD", totalAmount, merchantAccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("paypal create order with vault: %w", err)
 	}
@@ -227,12 +228,12 @@ func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) er
 		return fmt.Errorf("get order detail: %w", err)
 	}
 
-	merchant, err := s.merchantRepo.Get(ctx, orderDetail.MerchantID)
+	merchantAccessToken, err := s.getValidMerchantAccessToken(ctx, orderDetail.MerchantID)
 	if err != nil {
-		return fmt.Errorf("merchant not found")
+		return err
 	}
 
-	_, err = s.paypalClient.CaptureOrder(ctx, orderID, merchant.PayPalAccessToken)
+	_, err = s.paypalClient.CaptureOrder(ctx, orderID, merchantAccessToken)
 	if err != nil {
 		return fmt.Errorf("paypal api capture order: %w", err)
 	}
@@ -285,7 +286,6 @@ func (s *paypalServiceImpl) handleOrderPaid(ctx context.Context, eventPayload *m
 	if orderID == "" {
 		return fmt.Errorf("could not find order_id in webhook payload")
 	}
-	fmt.Println("orderID", orderID)
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		orderInfo, err := s.orderRepo.MarkPaid(tx, orderID)
@@ -395,4 +395,41 @@ func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID st
 	}
 
 	return approveURL, nil
+}
+
+func (s *paypalServiceImpl) getValidMerchantAccessToken(ctx context.Context, merchantID string) (string, error) {
+	merchant, err := s.merchantRepo.Get(ctx, merchantID)
+	if err != nil {
+		return "", fmt.Errorf("merchant not found")
+	}
+
+	if merchant.TokenExpiresAt != nil {
+		// still valid (add small buffer)
+		expiryTime := merchant.TokenExpiresAt.Add(-2 * time.Minute)
+		if time.Now().Before(expiryTime) {
+			return merchant.PayPalAccessToken, nil
+		}
+	}
+
+	// refresh required
+	token, err := s.paypalClient.RefreshMerchantToken(
+		ctx,
+		merchant.PayPalRefreshToken,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	// update merchant new tokens
+	expiresAt := time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
+	if err := s.merchantRepo.Upsert(ctx, &model.Merchant{
+		ID:                 merchantID,
+		PayPalAccessToken:  token.AccessToken,
+		PayPalRefreshToken: token.RefreshToken,
+		TokenExpiresAt:     &expiresAt,
+	}); err != nil {
+		return "", err
+	}
+
+	return token.AccessToken, nil
 }

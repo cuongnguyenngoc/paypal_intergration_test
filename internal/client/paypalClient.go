@@ -20,6 +20,8 @@ import (
 type PaypalClient interface {
 	BuildConnectURL(merchantID string) string
 	ExchangeAuthCode(ctx context.Context, code string) (*model.PayPalToken, error)
+	RefreshMerchantToken(ctx context.Context, refreshToken string) (*model.PayPalToken, error)
+
 	CreateOrderForApproval(ctx context.Context, serviceBaseUrl string, userID string, currency string, cost int32, merchantToken string) (*HandleOrderResponse, error)
 	CreateOrderWithVault(ctx context.Context, userID string, vaultID string, currency string, cost int32, merchantToken string) (string, error)
 	CaptureOrder(ctx context.Context, orderID string, merchantToken string) (*HandleOrderResponse, error)
@@ -119,6 +121,43 @@ func (c *paypalClientImpl) ExchangeAuthCode(ctx context.Context, code string) (*
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	var token model.PayPalToken
+	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
+		return nil, err
+	}
+
+	return &token, nil
+}
+
+func (c *paypalClientImpl) RefreshMerchantToken(ctx context.Context, refreshToken string) (*model.PayPalToken, error) {
+	data := url.Values{}
+	data.Set("grant_type", "refresh_token")
+	data.Set("refresh_token", refreshToken)
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		c.baseApiURL+"/v1/oauth2/token",
+		strings.NewReader(data.Encode()),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	req.SetBasicAuth(c.paypalClientID, c.paypalClientSecret)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("paypal refresh token failed: %s", b)
+	}
 
 	var token model.PayPalToken
 	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
