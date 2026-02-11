@@ -39,7 +39,7 @@ func (h *MerchantHandler) CreateMerchant(c echo.Context) error {
 func (h *MerchantHandler) PayPalStatus(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	merchantID := c.Param("id")
+	merchantID := c.Param("merchantID")
 
 	merchant, err := h.merchantService.GetMerchant(ctx, merchantID)
 	if err != nil {
@@ -54,7 +54,7 @@ func (h *MerchantHandler) PayPalStatus(c echo.Context) error {
 func (h *MerchantHandler) DisconnectPayPal(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	merchantID := c.Param("id")
+	merchantID := c.Param("merchantID")
 
 	err := h.merchantService.DisconnectPayPal(ctx, merchantID)
 	if err != nil {
