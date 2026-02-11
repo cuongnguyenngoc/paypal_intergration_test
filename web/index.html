@@ -8,10 +8,17 @@
     <button onclick="createMerchant()">Create Merchant</button>
   </div>
 
-  <div id="connect-section" style="display:none; margin-top:10px;">
+  <div id="paypal-status" style="margin-top:10px; display:none;"></div>
+
+  <div id="connect-section" style="margin-top:10px; display:none;">
     <button onclick="connectPaypal()">Connect PayPal</button>
   </div>
+
+  <div id="disconnect-section" style="margin-top:10px; display:none;">
+    <button onclick="disconnectPaypal()">Disconnect PayPal</button>
+  </div>
 </div>
+
 
 <hr/>
 
@@ -41,7 +48,6 @@ async function createMerchant() {
   if (!res.ok) return;
 
   const data = await res.json();
-  console.log("data", data)
   localStorage.setItem(MERCHANT_KEY, data.id);
 
   document.getElementById("merchant-info").innerHTML =
@@ -56,6 +62,53 @@ function connectPaypal() {
 
   window.location.href = `/api/merchants/${merchantId}/paypal/connect`;
 }
+
+async function checkPaypalStatus() {
+  const merchantId = localStorage.getItem(MERCHANT_KEY);
+  if (!merchantId) return;
+
+  const res = await fetch(`/api/merchants/${merchantId}/paypal/status`);
+  if (!res.ok) return;
+
+  const data = await res.json();
+  console.log("data", data)
+
+  document.getElementById("paypal-status").style.display = "block";
+
+  if (data.connected) {
+    document.getElementById("paypal-status").innerHTML =
+      "✅ PayPal connected";
+    document.getElementById("connect-section").style.display = "none";
+    document.getElementById("disconnect-section").style.display = "block";
+    enablePayments();
+  } else {
+    document.getElementById("paypal-status").innerHTML =
+      "❌ PayPal not connected";
+    document.getElementById("connect-section").style.display = "block";
+    document.getElementById("disconnect-section").style.display = "none";
+    document.getElementById("pay-btn").disabled = true;
+  }
+}
+
+async function disconnectPaypal() {
+  const merchantId = localStorage.getItem(MERCHANT_KEY);
+  if (!merchantId) return;
+
+  const res = await fetch(
+    `/api/merchants/${merchantId}/paypal/disconnect`,
+    { method: "POST" }
+  );
+
+  if (!res.ok) {
+    alert("Failed to disconnect PayPal");
+    return;
+  }
+
+  alert("PayPal disconnected");
+  document.getElementById("pay-again-btn").style.display = "none";
+  checkPaypalStatus();
+}
+
 
 /* ---------------- Inventory ---------------- */
 
@@ -157,6 +210,7 @@ function enablePayments() {
     `<strong>Merchant ID:</strong> ${merchantId}`;
   document.getElementById("connect-section").style.display = "block";
 
+  checkPaypalStatus();
   enablePayments();
   loadInventory();
   checkSavedPayment();
