@@ -49,6 +49,8 @@ func (s *Server) setupRoutes() {
 	api.GET("/inventories", s.userHandler.GetUsersInventory)
 	api.POST("/merchants/create", s.merchantHandler.CreateMerchant)
 	api.GET("/merchants/:merchantID/paypal/connect", s.paypalHandler.ConnectMerchant)
+	api.GET("/merchants/:merchantID/paypal/status", s.merchantHandler.PayPalStatus)
+	api.POST("/merchants/:merchantID/paypal/disconnect", s.merchantHandler.DisconnectPayPal)
 
 	// -------- paypal --------
 	paypal := api.Group("/paypal")

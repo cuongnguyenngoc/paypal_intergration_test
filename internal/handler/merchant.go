@@ -35,3 +35,33 @@ func (h *MerchantHandler) CreateMerchant(c echo.Context) error {
 		"id": merchantID,
 	})
 }
+
+func (h *MerchantHandler) PayPalStatus(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	merchantID := c.Param("id")
+
+	merchant, err := h.merchantService.GetMerchant(ctx, merchantID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+
+	return c.JSON(http.StatusOK, map[string]bool{
+		"connected": merchant.PayPalAccessToken != "",
+	})
+}
+
+func (h *MerchantHandler) DisconnectPayPal(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	merchantID := c.Param("id")
+
+	err := h.merchantService.DisconnectPayPal(ctx, merchantID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"status": "disconnected",
+	})
+}

@@ -13,6 +13,7 @@ type MerchantService interface {
 	CreateMerchant(ctx context.Context, name string) (string, error)
 	UpdatePaypalTokens(ctx context.Context, merchantID string, tokens *model.PayPalToken) error
 	GetMerchant(ctx context.Context, id string) (*model.Merchant, error)
+	DisconnectPayPal(ctx context.Context, merchantID string) error
 }
 
 type merchantServiceImpl struct {
@@ -52,4 +53,8 @@ func (s *merchantServiceImpl) UpdatePaypalTokens(ctx context.Context, merchantID
 
 func (s *merchantServiceImpl) GetMerchant(ctx context.Context, id string) (*model.Merchant, error) {
 	return s.merchantRepo.Get(ctx, id)
+}
+
+func (s *merchantServiceImpl) DisconnectPayPal(ctx context.Context, merchantID string) error {
+	return s.merchantRepo.ClearPayPalTokens(ctx, merchantID)
 }

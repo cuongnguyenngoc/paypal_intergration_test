@@ -12,6 +12,7 @@ import (
 type MerchantRepository interface {
 	Upsert(ctx context.Context, merchant *model.Merchant) error
 	Get(ctx context.Context, merchantID string) (*model.Merchant, error)
+	ClearPayPalTokens(ctx context.Context, merchantID string) error
 }
 
 type merchantRepoImpl struct {
@@ -46,4 +47,26 @@ func (r *merchantRepoImpl) Get(ctx context.Context, merchantID string) (*model.M
 	}
 
 	return &merchant, nil
+}
+
+func (r *merchantRepoImpl) ClearPayPalTokens(ctx context.Context, merchantID string) error {
+	result := r.db.
+		WithContext(ctx).
+		Model(&model.Merchant{}).
+		Where("id = ?", merchantID).
+		Updates(map[string]interface{}{
+			"pay_pal_access_token":  "",
+			"pay_pal_refresh_token": "",
+			"token_expires_at":      nil,
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+
+	return nil
 }
