@@ -88,10 +88,12 @@ func (c *paypalClientImpl) getAccessToken() (string, error) {
 }
 
 func (c *paypalClientImpl) BuildConnectURL(merchantID string) string {
+	// scopes := "openid https://uri.paypal.com/services/payments"
+	scopes := "openid profile email https://uri.paypal.com/services/paypalattributes"
 	return fmt.Sprintf(
-		"https://www.sandbox.paypal.com/connect?flowEntry=static&client_id=%s&scope=%s&redirect_uri=%s&state=%s",
+		"https://www.sandbox.paypal.com/connect?flowEntry=static&client_id=%s&scope=%s&redirect_uri=%s&state=%s&response_type=code",
 		c.paypalClientID,
-		url.QueryEscape("https://uri.paypal.com/services/payments"),
+		url.QueryEscape(scopes),
 		url.QueryEscape(c.paypalRedirectURL),
 		merchantID,
 	)

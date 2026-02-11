@@ -106,17 +106,17 @@ func (h *PaypalHandler) PayAgain(c echo.Context) error {
 }
 
 func (h *PaypalHandler) HandleSuccess(c echo.Context) error {
-	// ctx := c.Request().Context()
+	ctx := c.Request().Context()
 
 	orderID := c.QueryParam("token")
 	if orderID == "" {
 		return c.String(400, "missing order token")
 	}
 
-	// err := h.paypalService.CaptureOrder(ctx, orderID)
-	// if err != nil {
-	// 	return err
-	// }
+	err := h.paypalService.CaptureOrder(ctx, orderID)
+	if err != nil {
+		return err
+	}
 
 	html := `
 	<!DOCTYPE html>

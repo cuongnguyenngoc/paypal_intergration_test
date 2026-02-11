@@ -10,13 +10,14 @@ type Product struct {
 }
 
 type Order struct {
-	OrderID   string `gorm:"primaryKey;size:64;not null"` // paypal order id
-	Status    string `gorm:"size:32;index;not null"`      // CREATED, APPROVED, PAID, FAILED
-	UserID    string `gorm:"size:32;index"`
-	Amount    int32  `gorm:"not null"` // total amount (sum of items)
-	Currency  string `gorm:"size:8;not null"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	OrderID    string `gorm:"primaryKey;size:64;not null"` // paypal order id
+	Status     string `gorm:"size:32;index;not null"`      // CREATED, APPROVED, PAID, FAILED
+	UserID     string `gorm:"size:32;index"`
+	Amount     int32  `gorm:"not null"` // total amount (sum of items)
+	Currency   string `gorm:"size:8;not null"`
+	MerchantID string `gorm:"not null"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 type OrderItem struct {

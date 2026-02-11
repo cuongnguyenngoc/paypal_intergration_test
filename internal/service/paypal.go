@@ -18,7 +18,7 @@ type PaypalService interface {
 	ExchangeAuthCode(ctx context.Context, code string) (*model.PayPalToken, error)
 	Pay(ctx context.Context, merchantID string, userID string, items []*dto.Item) (*dto.PayResponse, error)
 	PayAgain(ctx context.Context, merchantID string, userID string, items []*dto.Item) (*dto.PayResponse, error)
-	CaptureOrder(ctx context.Context, merchantID string, orderID string) error
+	CaptureOrder(ctx context.Context, orderID string) error
 	HandleWebhook(ctx context.Context, headers http.Header, body []byte) error
 	CheckUserHaveSavedPayment(ctx context.Context, userID string) (bool, error)
 	SubscribeSubscription(ctx context.Context, userID string, productCode string) (approveURL string, err error)
@@ -121,11 +121,12 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, merchantID string, userID s
 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		err = s.orderRepo.Create(tx, &model.Order{
-			OrderID:  resp.OrderID,
-			UserID:   userID,
-			Status:   "CREATED",
-			Amount:   totalAmount,
-			Currency: "USD",
+			OrderID:    resp.OrderID,
+			UserID:     userID,
+			Status:     "CREATED",
+			Amount:     totalAmount,
+			Currency:   "USD",
+			MerchantID: merchantID,
 		})
 		if err != nil {
 			return fmt.Errorf("store order in db: %w", err)
@@ -220,8 +221,13 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, merchantID string, use
 	}, nil
 }
 
-func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, merchantID string, orderID string) error {
-	merchant, err := s.merchantRepo.Get(ctx, merchantID)
+func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) error {
+	orderDetail, err := s.orderRepo.FindByOrderID(orderID)
+	if err != nil {
+		return fmt.Errorf("get order detail: %w", err)
+	}
+
+	merchant, err := s.merchantRepo.Get(ctx, orderDetail.MerchantID)
 	if err != nil {
 		return fmt.Errorf("merchant not found")
 	}
@@ -279,12 +285,14 @@ func (s *paypalServiceImpl) handleOrderPaid(ctx context.Context, eventPayload *m
 	if orderID == "" {
 		return fmt.Errorf("could not find order_id in webhook payload")
 	}
+	fmt.Println("orderID", orderID)
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		orderInfo, err := s.orderRepo.MarkPaid(tx, orderID)
 		if err != nil {
 			return fmt.Errorf("mark order paid: %w", err)
 		}
+		fmt.Println("orderInfo", orderInfo)
 
 		orderItems, err := s.orderRepo.GetOrderItems(tx, orderID)
 		if err != nil {

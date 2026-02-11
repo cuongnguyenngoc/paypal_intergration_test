@@ -64,7 +64,7 @@ func (r *orderRepoImpl) MarkPaid(tx *gorm.DB, orderID string) (*model.Order, err
 	err := tx.Transaction(func(tx *gorm.DB) error {
 		// Update the record
 		result := tx.Model(&order).
-			Where("order_id = ? AND status = ?", orderID, "COMPLETED").
+			Where("order_id = ?", orderID).
 			Updates(map[string]interface{}{
 				"status":     "PAID",
 				"updated_at": time.Now(),
