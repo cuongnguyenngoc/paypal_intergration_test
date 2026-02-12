@@ -56,18 +56,12 @@ func (h *PaypalHandler) OAuthCallback(c echo.Context) error {
 		return err
 	}
 
-	paypalMerchantID, err := h.paypalService.GetPaypalMerchantID(ctx, token.AccessToken)
-	fmt.Println("paypalMerchantID", paypalMerchantID, "err", err)
+	err = h.merchantService.UpdatePaypalTokens(ctx, merchantID, token)
 	if err != nil {
 		return err
 	}
 
-	err = h.merchantService.UpdatePaypalTokens(ctx, merchantID, paypalMerchantID, token)
-	if err != nil {
-		return err
-	}
-
-	err = h.paypalService.SetExistingProductsSubPlan(ctx, merchantID, paypalMerchantID, token.AccessToken) // silent setup subscription products for merchant when they connect to their paypal business account
+	err = h.paypalService.SetExistingProductsSubPlan(ctx, merchantID, token.AccessToken) // silent setup subscription products for merchant when they connect to their paypal business account
 	if err != nil {
 		log.Println("set existing plans for merchant: %w", err)
 	}
@@ -223,6 +217,63 @@ func (h *PaypalHandler) SubscribeSubscription(c echo.Context) error {
 	return c.JSON(http.StatusOK, &dto.SubscribeResponse{
 		ApprovalURL: approveURL,
 	})
+}
+
+func (h *PaypalHandler) HandleSubscriptionSuccess(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	subscriptionID := c.QueryParam("subscription_id")
+	if subscriptionID == "" {
+		return c.String(400, "missing subscription id")
+	}
+
+	err := h.paypalService.HandleSubscriptionSuccess(ctx, subscriptionID)
+	if err != nil {
+		return err
+	}
+
+	html := `
+	<!DOCTYPE html>
+	<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Subscription Processing</title>
+		<style>
+			body {
+				font-family: Arial, sans-serif;
+				text-align: center;
+				margin-top: 80px;
+			}
+			.countdown {
+				font-size: 24px;
+				font-weight: bold;
+			}
+		</style>
+	</head>
+	<body>
+		<h2>Subscription approved</h2>
+		<p>We are processing your product vip_monthly subscription</p>
+		<p>Redirecting to homepage in <span class="countdown" id="countdown">5</span> seconds…</p>
+
+		<script>
+			let seconds = 5;
+			const el = document.getElementById("countdown");
+
+			const timer = setInterval(function () {
+				seconds--;
+				el.textContent = seconds;
+
+				if (seconds <= 0) {
+					clearInterval(timer);
+					window.location.href = "/";
+				}
+			}, 1000);
+		</script>
+	</body>
+	</html>
+	`
+
+	return c.HTML(http.StatusOK, html)
 }
 
 func (h *PaypalHandler) GetSubscriptionStatus(c echo.Context) error {

@@ -14,7 +14,7 @@ type SubscriptionRepository interface {
 	StoreSubPlan(ctx context.Context, plan *model.SubscriptionPlan) error
 
 	CreateSubscription(ctx context.Context, sub *model.UserSubscription) error
-	ActivateSubscription(ctx context.Context, subscriptionID string, start time.Time, next *time.Time) error
+	ActivateSubscription(ctx context.Context, subscriptionID string, start *time.Time, next *time.Time) error
 	CancelSubscription(ctx context.Context, subscriptionID string) error
 	GetBySubscriptionID(ctx context.Context, subscriptionID string) (*model.UserSubscription, error)
 	GetActiveByUser(ctx context.Context, userID string, merchantID string) (*model.UserSubscription, error)
@@ -55,7 +55,7 @@ func (r *subscriptionRepoImpl) CreateSubscription(ctx context.Context, sub *mode
 	return r.db.WithContext(ctx).Create(sub).Error
 }
 
-func (r *subscriptionRepoImpl) ActivateSubscription(ctx context.Context, subscriptionID string, start time.Time, next *time.Time) error {
+func (r *subscriptionRepoImpl) ActivateSubscription(ctx context.Context, subscriptionID string, start *time.Time, next *time.Time) error {
 	return r.db.WithContext(ctx).
 		Model(&model.UserSubscription{}).
 		Where("pay_pal_subscription_id = ?", subscriptionID).

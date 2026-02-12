@@ -65,12 +65,15 @@ type PaypalResource struct {
 	PurchaseUnits     []PurchaseUnit    `json:"purchase_units"`
 	SupplementaryData SupplementaryData `json:"supplementary_data"`
 
+	CustomID string `json:"custom_id"`
+
 	// Vault-specific
 	Metadata        PayPalMetadata `json:"metadata"`
 	PaymentResource PaymentSource  `json:"payment_source"`
 
 	// SUBSCRIPTION
-	Subscription *PayPalSubscriptionResource `json:"subscription,omitempty"`
+	BillingTime *SubscriptionBillingTime `json:"billing_info,omitempty"`
+	CreateTime  time.Time                `json:"create_time"`
 }
 
 type PayPalWebhookEvent struct {
@@ -80,17 +83,8 @@ type PayPalWebhookEvent struct {
 	Resource   PaypalResource `json:"resource"`
 }
 
-type PayPalSubscriptionResource struct {
-	ID       string `json:"id"`
-	PlanID   string `json:"plan_id"`
-	CustomID string `json:"custom_id"`
-	Status   string `json:"status"`
-
-	BillingInfo struct {
-		NextBillingTime *time.Time `json:"next_billing_time"`
-	} `json:"billing_info"`
-
-	StartTime time.Time `json:"start_time"`
+type SubscriptionBillingTime struct {
+	NextBillingTime *time.Time `json:"next_billing_time"`
 }
 
 type PayPalToken struct {

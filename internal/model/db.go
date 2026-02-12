@@ -81,7 +81,7 @@ type UserSubscription struct {
 	MerchantID           string
 	PayPalSubscriptionID string `gorm:"size:64;uniqueIndex"`
 	Status               string // ACTIVE, CANCELLED, SUSPENDED
-	StartTime            time.Time
+	StartTime            *time.Time
 	NextBillingTime      *time.Time
 	CreatedAt            time.Time
 	UpdatedAt            time.Time

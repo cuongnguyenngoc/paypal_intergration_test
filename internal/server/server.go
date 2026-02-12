@@ -64,6 +64,7 @@ func (s *Server) setupRoutes() {
 
 	subscription := paypal.Group("/subscription")
 	subscription.POST("/subscribe", s.paypalHandler.SubscribeSubscription)
+	subscription.GET("/success", s.paypalHandler.HandleSubscriptionSuccess)
 	subscription.GET("/status", s.paypalHandler.GetSubscriptionStatus)
 	subscription.POST("/cancel", s.paypalHandler.CancelSubscription)
 }

@@ -26,8 +26,9 @@ type PaypalService interface {
 	HandleWebhook(ctx context.Context, headers http.Header, body []byte) error
 	CheckUserHaveSavedPayment(ctx context.Context, userID string) (bool, error)
 
-	SetExistingProductsSubPlan(ctx context.Context, merchantID string, paypalMerchantID string, merchantAccessToken string) error
+	SetExistingProductsSubPlan(ctx context.Context, merchantID string, merchantAccessToken string) error
 	SubscribeSubscription(ctx context.Context, userID string, productID string, merchantID string) (approveURL string, err error)
+	HandleSubscriptionSuccess(ctx context.Context, subscriptionID string) error
 	CancelSubscription(ctx context.Context, userID string, merchantID string) error
 	HasActiveSubscription(ctx context.Context, userID string, merchantID string) (bool, error)
 }
@@ -356,21 +357,20 @@ func (s *paypalServiceImpl) handlePaymentTokenCreated(ctx context.Context, event
 }
 
 func (s *paypalServiceImpl) handleSubscriptionActivated(ctx context.Context, event *model.PayPalWebhookEvent) error {
-	res := event.Resource.Subscription
-
-	if res.ID == "" || res.CustomID == "" {
+	resource := event.Resource
+	if resource.ID == "" || resource.CustomID == "" || resource.BillingTime == nil {
 		return fmt.Errorf("invalid subscription webhook")
 	}
 
 	return s.subscriptionRepo.ActivateSubscription(ctx,
-		res.ID,
-		res.StartTime,
-		res.BillingInfo.NextBillingTime,
+		resource.ID,
+		&resource.CreateTime,
+		resource.BillingTime.NextBillingTime,
 	)
 }
 
 func (s *paypalServiceImpl) handleSubscriptionCancelled(ctx context.Context, event *model.PayPalWebhookEvent) error {
-	subID := event.Resource.Subscription.ID
+	subID := event.Resource.ID
 	if subID == "" {
 		return nil
 	}
@@ -415,6 +415,7 @@ func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID st
 	err = s.subscriptionRepo.CreateSubscription(ctx, &model.UserSubscription{
 		UserID:               userID,
 		ProductID:            productID,
+		MerchantID:           merchantID,
 		PayPalSubscriptionID: subID,
 		Status:               "PENDING",
 	})
@@ -423,6 +424,10 @@ func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID st
 	}
 
 	return approveURL, nil
+}
+
+func (s *paypalServiceImpl) HandleSubscriptionSuccess(ctx context.Context, subscriptionID string) error {
+	return nil
 }
 
 func (s *paypalServiceImpl) HasActiveSubscription(ctx context.Context, userID string, merchantID string) (bool, error) {
@@ -493,14 +498,14 @@ func (s *paypalServiceImpl) getValidMerchantAccessToken(ctx context.Context, mer
 	return token.AccessToken, nil
 }
 
-func (s *paypalServiceImpl) SetExistingProductsSubPlan(ctx context.Context, merchantID string, paypalMerchantID string, merchantAccessToken string) error {
+func (s *paypalServiceImpl) SetExistingProductsSubPlan(ctx context.Context, merchantID string, merchantAccessToken string) error {
 	subscriptionProducts, err := s.productRepo.GetByType(model.SUBSCRIPTION)
 	if err != nil {
 		return err
 	}
 
 	for _, product := range subscriptionProducts {
-		err = s.setupProductSubPlan(ctx, merchantID, paypalMerchantID, merchantAccessToken, product)
+		err = s.setupProductSubPlan(ctx, merchantID, merchantAccessToken, product)
 		if err != nil {
 			return err
 		}
@@ -509,11 +514,10 @@ func (s *paypalServiceImpl) SetExistingProductsSubPlan(ctx context.Context, merc
 	return nil
 }
 
-func (s *paypalServiceImpl) setupProductSubPlan(ctx context.Context, merchantID string, paypalMerchantID string, merchantAccessToken string, product *model.Product) error {
+func (s *paypalServiceImpl) setupProductSubPlan(ctx context.Context, merchantID string, merchantAccessToken string, product *model.Product) error {
 	// 1. Create PayPal Product
 	ppProductID, err := s.paypalClient.CreateSubscriptionProduct(
 		ctx,
-		paypalMerchantID,
 		merchantAccessToken,
 		product,
 	)
@@ -525,7 +529,6 @@ func (s *paypalServiceImpl) setupProductSubPlan(ctx context.Context, merchantID 
 	// 2. Create PayPal Plan
 	ppPlanID, err := s.paypalClient.CreateSubscriptionPlan(
 		ctx,
-		paypalMerchantID,
 		merchantAccessToken,
 		ppProductID,
 		product,
