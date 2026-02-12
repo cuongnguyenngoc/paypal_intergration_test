@@ -35,7 +35,7 @@ func main() {
 	paypalClient := client.NewPaypalClient(&cfg.Paypal)
 
 	productRepo := repository.NewProductRepository(db)
-	err := productRepo.Seed()
+	err := productRepo.Seed(context.Background())
 	if err != nil {
 		log.Fatal("seed some products data into db")
 	}

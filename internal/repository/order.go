@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"paypal-integration-demo/internal/model"
 	"time"
 
@@ -8,13 +9,13 @@ import (
 )
 
 type OrderRepository interface {
-	Create(tx *gorm.DB, order *model.Order) error
-	FindByOrderID(orderID string) (*model.Order, error)
-	MarkCompleted(tx *gorm.DB, orderID string) error
-	MarkPaid(tx *gorm.DB, orderID string) (*model.Order, error)
-	IsPaid(orderID string) (bool, error)
-	CreateOrderItems(tx *gorm.DB, items []*model.OrderItem) error
-	GetOrderItems(tx *gorm.DB, orderID string) ([]*model.OrderItem, error)
+	Create(ctx context.Context, tx *gorm.DB, order *model.Order) error
+	FindByOrderID(ctx context.Context, orderID string) (*model.Order, error)
+	MarkCompleted(ctx context.Context, tx *gorm.DB, orderID string) error
+	MarkPaid(ctx context.Context, tx *gorm.DB, orderID string) (*model.Order, error)
+	IsPaid(ctx context.Context, orderID string) (bool, error)
+	CreateOrderItems(ctx context.Context, tx *gorm.DB, items []*model.OrderItem) error
+	GetOrderItems(ctx context.Context, tx *gorm.DB, orderID string) ([]*model.OrderItem, error)
 }
 
 type orderRepoImpl struct {
@@ -27,13 +28,13 @@ func NewOrderRepository(db *gorm.DB) OrderRepository {
 	}
 }
 
-func (r *orderRepoImpl) Create(tx *gorm.DB, order *model.Order) error {
-	return tx.Create(order).Error
+func (r *orderRepoImpl) Create(ctx context.Context, tx *gorm.DB, order *model.Order) error {
+	return tx.WithContext(ctx).Create(order).Error
 }
 
-func (r *orderRepoImpl) FindByOrderID(orderID string) (*model.Order, error) {
+func (r *orderRepoImpl) FindByOrderID(ctx context.Context, orderID string) (*model.Order, error) {
 	var order model.Order
-	err := r.db.
+	err := r.db.WithContext(ctx).
 		Where("order_id = ?", orderID).
 		First(&order).Error
 
@@ -44,8 +45,8 @@ func (r *orderRepoImpl) FindByOrderID(orderID string) (*model.Order, error) {
 	return &order, nil
 }
 
-func (r *orderRepoImpl) MarkCompleted(tx *gorm.DB, orderID string) error {
-	return tx.Model(&model.Order{}).
+func (r *orderRepoImpl) MarkCompleted(ctx context.Context, tx *gorm.DB, orderID string) error {
+	return tx.WithContext(ctx).Model(&model.Order{}).
 		Where(`
 			order_id = ?
 			AND status IN ?
@@ -59,9 +60,9 @@ func (r *orderRepoImpl) MarkCompleted(tx *gorm.DB, orderID string) error {
 		}).Error
 }
 
-func (r *orderRepoImpl) MarkPaid(tx *gorm.DB, orderID string) (*model.Order, error) {
+func (r *orderRepoImpl) MarkPaid(ctx context.Context, tx *gorm.DB, orderID string) (*model.Order, error) {
 	var order model.Order
-	err := tx.Transaction(func(tx *gorm.DB) error {
+	err := tx.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Update the record
 		result := tx.Model(&order).
 			Where("order_id = ?", orderID).
@@ -84,9 +85,9 @@ func (r *orderRepoImpl) MarkPaid(tx *gorm.DB, orderID string) (*model.Order, err
 	return &order, err
 }
 
-func (r *orderRepoImpl) IsPaid(orderID string) (bool, error) {
+func (r *orderRepoImpl) IsPaid(ctx context.Context, orderID string) (bool, error) {
 	var count int64
-	err := r.db.Model(&model.Order{}).
+	err := r.db.WithContext(ctx).Model(&model.Order{}).
 		Where("order_id = ?", orderID).
 		Where("status = ?", "PAID").
 		Count(&count).Error
@@ -94,13 +95,13 @@ func (r *orderRepoImpl) IsPaid(orderID string) (bool, error) {
 	return count > 0, err
 }
 
-func (r *orderRepoImpl) CreateOrderItems(tx *gorm.DB, items []*model.OrderItem) error {
-	return tx.Create(&items).Error
+func (r *orderRepoImpl) CreateOrderItems(ctx context.Context, tx *gorm.DB, items []*model.OrderItem) error {
+	return tx.WithContext(ctx).Create(&items).Error
 }
 
-func (r *orderRepoImpl) GetOrderItems(tx *gorm.DB, orderID string) ([]*model.OrderItem, error) {
+func (r *orderRepoImpl) GetOrderItems(ctx context.Context, tx *gorm.DB, orderID string) ([]*model.OrderItem, error) {
 	var items []*model.OrderItem
-	err := tx.Where("order_id = ?", orderID).
+	err := tx.WithContext(ctx).Where("order_id = ?", orderID).
 		Find(&items).Error
 
 	if err != nil {

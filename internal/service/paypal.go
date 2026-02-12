@@ -95,7 +95,7 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, merchantID string, userID s
 
 		itemQuantityMap[item.Sku] = item.Quantity
 	}
-	products, err := s.productRepo.FindMany(productIDs)
+	products, err := s.productRepo.FindMany(ctx, productIDs)
 	if err != nil {
 		return nil, fmt.Errorf("get many products by item ids")
 	}
@@ -133,7 +133,7 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, merchantID string, userID s
 	}
 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		err = s.orderRepo.Create(tx, &model.Order{
+		err = s.orderRepo.Create(ctx, tx, &model.Order{
 			OrderID:    resp.OrderID,
 			UserID:     userID,
 			Status:     "CREATED",
@@ -145,7 +145,7 @@ func (s *paypalServiceImpl) Pay(ctx context.Context, merchantID string, userID s
 			return fmt.Errorf("store order in db: %w", err)
 		}
 
-		err = s.orderRepo.CreateOrderItems(tx, orderItems)
+		err = s.orderRepo.CreateOrderItems(ctx, tx, orderItems)
 		if err != nil {
 			return fmt.Errorf("store order items in db: %w", err)
 		}
@@ -170,7 +170,7 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, merchantID string, use
 		itemQuantityMap[item.Sku] = item.Quantity
 	}
 
-	products, err := s.productRepo.FindMany(productIDs)
+	products, err := s.productRepo.FindMany(ctx, productIDs)
 	if err != nil {
 		return nil, fmt.Errorf("get products: %w", err)
 	}
@@ -212,7 +212,7 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, merchantID string, use
 	}
 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := s.orderRepo.Create(tx, &model.Order{
+		if err := s.orderRepo.Create(ctx, tx, &model.Order{
 			OrderID:  orderID,
 			UserID:   userID,
 			Status:   "COMPLETED", // paypal auto capture order when create order with vault so order status should be compeleted
@@ -222,7 +222,7 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, merchantID string, use
 			return err
 		}
 
-		if err := s.orderRepo.CreateOrderItems(tx, orderItems); err != nil {
+		if err := s.orderRepo.CreateOrderItems(ctx, tx, orderItems); err != nil {
 			return err
 		}
 
@@ -235,7 +235,7 @@ func (s *paypalServiceImpl) PayAgain(ctx context.Context, merchantID string, use
 }
 
 func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) error {
-	orderDetail, err := s.orderRepo.FindByOrderID(orderID)
+	orderDetail, err := s.orderRepo.FindByOrderID(ctx, orderID)
 	if err != nil {
 		return fmt.Errorf("get order detail: %w", err)
 	}
@@ -251,7 +251,7 @@ func (s *paypalServiceImpl) CaptureOrder(ctx context.Context, orderID string) er
 	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return s.orderRepo.MarkCompleted(tx, orderID)
+		return s.orderRepo.MarkCompleted(ctx, tx, orderID)
 	})
 }
 
@@ -300,13 +300,12 @@ func (s *paypalServiceImpl) handleOrderPaid(ctx context.Context, eventPayload *m
 	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		orderInfo, err := s.orderRepo.MarkPaid(tx, orderID)
+		orderInfo, err := s.orderRepo.MarkPaid(ctx, tx, orderID)
 		if err != nil {
 			return fmt.Errorf("mark order paid: %w", err)
 		}
-		fmt.Println("orderInfo", orderInfo)
 
-		orderItems, err := s.orderRepo.GetOrderItems(tx, orderID)
+		orderItems, err := s.orderRepo.GetOrderItems(ctx, tx, orderID)
 		if err != nil {
 			return fmt.Errorf("get order items: %w", err)
 		}
@@ -338,7 +337,7 @@ func (s *paypalServiceImpl) handlePaymentTokenCreated(ctx context.Context, event
 		return fmt.Errorf("missing user id in PAYMENT.TOKEN.CREATED event payload")
 	}
 
-	orderInfo, err := s.orderRepo.FindByOrderID(orderID)
+	orderInfo, err := s.orderRepo.FindByOrderID(ctx, orderID)
 	if err != nil {
 		return fmt.Errorf("mark order paid: %w", err)
 	}
@@ -379,7 +378,7 @@ func (s *paypalServiceImpl) handleSubscriptionCancelled(ctx context.Context, eve
 }
 
 func (s *paypalServiceImpl) SubscribeSubscription(ctx context.Context, userID string, productID string, merchantID string) (approveURL string, err error) {
-	product, err := s.productRepo.FindByID(productID)
+	product, err := s.productRepo.FindByID(ctx, productID)
 	if err != nil {
 		return "", err
 	}
@@ -499,7 +498,7 @@ func (s *paypalServiceImpl) getValidMerchantAccessToken(ctx context.Context, mer
 }
 
 func (s *paypalServiceImpl) SetExistingProductsSubPlan(ctx context.Context, merchantID string, merchantAccessToken string) error {
-	subscriptionProducts, err := s.productRepo.GetByType(model.SUBSCRIPTION)
+	subscriptionProducts, err := s.productRepo.GetByType(ctx, model.SUBSCRIPTION)
 	if err != nil {
 		return err
 	}
