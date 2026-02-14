@@ -430,12 +430,18 @@ func (c *paypalClientImpl) VerifyWebhookSignature(ctx context.Context, headers h
 
 func (c *paypalClientImpl) CreateUserSubscription(ctx context.Context, serviceBaseUrl string, planID string, userID string, merchantAccessToken string) (subscriptionID string, approveURL string, err error) {
 	payload := map[string]interface{}{
-		"plan_id":   planID,
-		"custom_id": userID,
+		"plan_id": planID,
+		// "custom_id": userID,
+		"payment_source": map[string]interface{}{
+			"token": map[string]interface{}{
+				"id":   "0dh61713w58324357",
+				"type": "PAYMENT_METHOD_TOKEN",
+			},
+		},
 		"application_context": map[string]interface{}{
-			"user_action": "SUBSCRIBE_NOW",
-			"return_url":  fmt.Sprintf("%s/api/paypal/subscription/success", serviceBaseUrl),
-			"cancel_url":  serviceBaseUrl,
+			// "user_action": "SUBSCRIBE_NOW",
+			"return_url": fmt.Sprintf("%s/api/paypal/subscription/success", serviceBaseUrl),
+			"cancel_url": serviceBaseUrl,
 		},
 	}
 
