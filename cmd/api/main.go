@@ -13,8 +13,8 @@ import (
 
 // Config - Replace with your Sandbox Credentials
 const (
-	ClientID     = "AdOhTlMi0m4_ssuz3-3bjF4oU_Nv2Ekh-QbCXr9THeK91splN2PKUPQM1xr9rsHOTS5HloMq_NNiPnHH"
-	ClientSecret = "EFyiRDAxAWw88iV79KvfU-8ZGI_LrRKaWF-D6bepIbPQ0_6Dp1VpUAMmuta2k75ZDudCyQoAj1BrGSgo"
+	ClientID     = "" // Get this from your PayPal Developer Dashboard
+	ClientSecret = ""
 	BaseURL      = "https://api-m.sandbox.paypal.com" // Use live URL for production
 	// PlanID       = "P-1D059697H5353731UNGHLL4Q"       // Create this in PayPal Dashboard first
 )
@@ -35,6 +35,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating setup token: %v", err)
 	}
+
+	// setupTokenID, approvalURL, err := createPayPalSetupToken(accessToken)
+	// if err != nil {
+	// 	log.Fatalf("Error creating PayPal setup token: %v", err)
+	// }
+
+	// fmt.Printf("\n🔗 Please approve the vaulting by visiting this URL:\n%s\n", approvalURL)
+	// fmt.Println("\n(In a real app, your frontend would handle this approval step and send the Setup Token ID back to your server.)")
+	// fmt.Println("Press ENTER once you have approved the link in your browser...")
+	// fmt.Scanln()
 
 	// fmt.Printf("\n🔴 ACTION REQUIRED: Open this URL to approve the vaulting:\n%s\n", approvalLink)
 	// fmt.Println("\n(In a real app, your frontend handles the approval and sends the Setup Token ID back to your server.)")
@@ -97,18 +107,18 @@ func createSetupToken(accessToken string) (string, string, error) {
 	payload := map[string]interface{}{
 		"payment_source": map[string]interface{}{
 			"card": map[string]interface{}{
-				"number":        "4111111111111111", // Visa Test Card
-				"expiry":        "2030-12",
-				"security_code": "123",
-				"name":          "Go Developer",
-				// Billing address is often required for ACDC
-				"billing_address": map[string]interface{}{
-					"address_line_1": "123 Main St",
-					"admin_area_2":   "San Jose",
-					"admin_area_1":   "CA",
-					"postal_code":    "95131",
-					"country_code":   "US",
-				},
+				// "number":        "4111111111111111", // Visa Test Card
+				// "expiry":        "2030-12",
+				// "security_code": "123",
+				// "name":          "Go Developer",
+				// // Billing address is often required for ACDC
+				// "billing_address": map[string]interface{}{
+				// 	"address_line_1": "123 Main St",
+				// 	"admin_area_2":   "San Jose",
+				// 	"admin_area_1":   "CA",
+				// 	"postal_code":    "95131",
+				// 	"country_code":   "US",
+				// },
 			},
 		},
 		"usage_type": "PLATFORM",
@@ -348,4 +358,59 @@ func createSubscription(accessToken, paymentToken, planID string) (string, error
 		return "", err
 	}
 	return result.ID, nil
+}
+
+func createPayPalSetupToken(accessToken string) (string, string, error) {
+	// 1. Change Source to "paypal"
+	payload := map[string]interface{}{
+		"payment_source": map[string]interface{}{
+			"paypal": map[string]interface{}{
+				"usage_type": "MERCHANT", // or "MERCHANT"
+				"experience_context": map[string]interface{}{
+					// "brand_name": "My Go App",
+					// "locale":     "en-US",
+					"return_url": "https://your-domain.com/callback", // User comes here after approving
+					"cancel_url": "https://your-domain.com/cancel",
+				},
+			},
+		},
+	}
+	body, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest("POST", BaseURL+"/v3/vault/setup-tokens", bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("PayPal-Request-Id", fmt.Sprintf("req-%d", time.Now().UnixNano()))
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+
+	// Parse Response
+	var result struct {
+		ID    string `json:"id"`
+		Links []struct {
+			Rel  string `json:"rel"`
+			Href string `json:"href"`
+		} `json:"links"`
+	}
+	json.NewDecoder(resp.Body).Decode(&result)
+	fmt.Println("Setup Token Result:", result)
+
+	// 2. Extract the "approve" link
+	var approvalURL string
+	for _, link := range result.Links {
+		if link.Rel == "approve" {
+			approvalURL = link.Href
+		}
+	}
+
+	if approvalURL == "" {
+		return "", "", fmt.Errorf("no approval url found (check your scope/permissions)")
+	}
+
+	// You now have the URL! Redirect your user here.
+	return result.ID, approvalURL, nil
 }
