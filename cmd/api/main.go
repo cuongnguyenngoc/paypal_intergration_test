@@ -13,8 +13,8 @@ import (
 
 // Config - Replace with your Sandbox Credentials
 const (
-	ClientID     = "" // Get this from your PayPal Developer Dashboard
-	ClientSecret = ""
+	ClientID     = "AdOhTlMi0m4_ssuz3-3bjF4oU_Nv2Ekh-QbCXr9THeK91splN2PKUPQM1xr9rsHOTS5HloMq_NNiPnHH" // Get this from your PayPal Developer Dashboard
+	ClientSecret = "EFyiRDAxAWw88iV79KvfU-8ZGI_LrRKaWF-D6bepIbPQ0_6Dp1VpUAMmuta2k75ZDudCyQoAj1BrGSgo"
 	BaseURL      = "https://api-m.sandbox.paypal.com" // Use live URL for production
 	// PlanID       = "P-1D059697H5353731UNGHLL4Q"       // Create this in PayPal Dashboard first
 )
@@ -31,20 +31,20 @@ func main() {
 	fmt.Println("✅ Access Token acquired")
 
 	// 2. Create Setup Token (To start the vaulting process)
-	setupTokenID, _, err := createSetupToken(accessToken)
-	if err != nil {
-		log.Fatalf("Error creating setup token: %v", err)
-	}
-
-	// setupTokenID, approvalURL, err := createPayPalSetupToken(accessToken)
+	// setupTokenID, _, err := createSetupToken(accessToken)
 	// if err != nil {
-	// 	log.Fatalf("Error creating PayPal setup token: %v", err)
+	// 	log.Fatalf("Error creating setup token: %v", err)
 	// }
 
-	// fmt.Printf("\n🔗 Please approve the vaulting by visiting this URL:\n%s\n", approvalURL)
-	// fmt.Println("\n(In a real app, your frontend would handle this approval step and send the Setup Token ID back to your server.)")
-	// fmt.Println("Press ENTER once you have approved the link in your browser...")
-	// fmt.Scanln()
+	setupTokenID, approvalURL, err := createPayPalSetupToken(accessToken)
+	if err != nil {
+		log.Fatalf("Error creating PayPal setup token: %v", err)
+	}
+
+	fmt.Printf("\n🔗 Please approve the vaulting by visiting this URL:\n%s\n", approvalURL)
+	fmt.Println("\n(In a real app, your frontend would handle this approval step and send the Setup Token ID back to your server.)")
+	fmt.Println("Press ENTER once you have approved the link in your browser...")
+	fmt.Scanln()
 
 	// fmt.Printf("\n🔴 ACTION REQUIRED: Open this URL to approve the vaulting:\n%s\n", approvalLink)
 	// fmt.Println("\n(In a real app, your frontend handles the approval and sends the Setup Token ID back to your server.)")
