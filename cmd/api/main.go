@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"paypal-integration-demo/internal/model"
 	"time"
 )
 
@@ -351,12 +352,11 @@ func createSubscription(accessToken, paymentToken, planID string) (string, error
 		return "", fmt.Errorf("API Error: %s", string(bodyBytes))
 	}
 
-	var result struct {
-		ID string `json:"id"`
-	}
+	var result model.PaypalResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", err
 	}
+	fmt.Println("Subscription Creation Result:", result)
 	return result.ID, nil
 }
 
