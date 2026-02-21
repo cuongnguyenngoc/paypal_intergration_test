@@ -32,7 +32,7 @@ func main() {
 	fmt.Println("✅ Access Token acquired")
 
 	// 2. Create Setup Token (To start the vaulting process)
-	// setupTokenID, _, err := createSetupToken(accessToken)
+	// setupTokenID, approvalURL, err := createSetupToken(accessToken)
 	// if err != nil {
 	// 	log.Fatalf("Error creating setup token: %v", err)
 	// }
@@ -108,18 +108,18 @@ func createSetupToken(accessToken string) (string, string, error) {
 	payload := map[string]interface{}{
 		"payment_source": map[string]interface{}{
 			"card": map[string]interface{}{
-				// "number":        "4111111111111111", // Visa Test Card
-				// "expiry":        "2030-12",
-				// "security_code": "123",
-				// "name":          "Go Developer",
-				// // Billing address is often required for ACDC
-				// "billing_address": map[string]interface{}{
-				// 	"address_line_1": "123 Main St",
-				// 	"admin_area_2":   "San Jose",
-				// 	"admin_area_1":   "CA",
-				// 	"postal_code":    "95131",
-				// 	"country_code":   "US",
-				// },
+				"number":        "4111111111111111", // Visa Test Card
+				"expiry":        "2030-12",
+				"security_code": "123",
+				"name":          "Go Developer",
+				// Billing address is often required for ACDC
+				"billing_address": map[string]interface{}{
+					"address_line_1": "123 Main St",
+					"admin_area_2":   "San Jose",
+					"admin_area_1":   "CA",
+					"postal_code":    "95131",
+					"country_code":   "US",
+				},
 			},
 		},
 		"usage_type": "PLATFORM",
@@ -324,12 +324,30 @@ func activatePlan(accessToken, planID string) error {
 func createSubscription(accessToken, paymentToken, planID string) (string, error) {
 	payload := map[string]interface{}{
 		"plan_id": planID,
-		"payment_source": map[string]interface{}{
-			"token": map[string]interface{}{
-				"id":   paymentToken,
-				"type": "PAYMENT_METHOD_TOKEN",
+		"subscriber": map[string]interface{}{
+			"name": map[string]interface{}{
+				"given_name": "John",
+				"surname":    "Doe",
+			},
+			"email_address": "john.doe@example.com",
+			"payment_source": map[string]interface{}{
+				"card": map[string]interface{}{
+					"number":        "4111111111111111", // Visa Test Card
+					"expiry":        "2030-12",
+					"security_code": "123",
+					"name":          "Go Developer",
+					// Billing address is often required for ACDC
+					"billing_address": map[string]interface{}{
+						"address_line_1": "123 Main St",
+						"admin_area_2":   "San Jose",
+						"admin_area_1":   "CA",
+						"postal_code":    "95131",
+						"country_code":   "US",
+					},
+				},
 			},
 		},
+
 		"application_context": map[string]interface{}{
 			"return_url": "https://example.com/return",
 			"cancel_url": "https://example.com/cancel",
