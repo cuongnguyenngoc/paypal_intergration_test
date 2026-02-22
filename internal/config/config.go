@@ -7,7 +7,8 @@ type Config struct {
 	BaseURL     string `env:"BASE_URL"`
 	DatabaseURL string `env:"DATABASE_URL"`
 
-	Paypal Paypal `envPrefix:"PAYPAL_"`
+	Paypal    Paypal    `envPrefix:"PAYPAL_"`
+	BrainTree Braintree `envPrefix:"BRAINTREE_"`
 }
 
 type Paypal struct {
@@ -16,6 +17,13 @@ type Paypal struct {
 	ClientSecret string `env:"CLIENT_SECRET"`
 	WebhookID    string `env:"WEBHOOK_ID"`
 	RedirectURL  string `env:"REDIRECT_URL"`
+}
+
+type Braintree struct {
+	Environment string `env:"ENVIRONMENT"`
+	MerchantID  string `env:"MERCHANT_ID"`
+	PublicKey   string `env:"PUBLIC_KEY"`
+	PrivateKey  string `env:"PRIVATE_KEY"`
 }
 
 type Environment struct {

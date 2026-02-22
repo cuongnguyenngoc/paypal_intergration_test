@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout | Mixed Cart</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 20px; }
+        #submit-button, #instance-button {
+            background-color: #0070ba; color: white; border: none;
+            padding: 15px 20px; font-size: 16px; border-radius: 5px;
+            cursor: pointer; width: 100%; margin-top: 20px; font-weight: bold;
+        }
+        #instance-button { background-color: #28a745; /* Green for saved card */ }
+        #submit-button:disabled, #instance-button:disabled { background-color: #ccc; cursor: not-allowed; }
+        .cart-summary { background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .saved-card-info { padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-top: 30px; text-align: center;}
+    </style>
+
+    <script src="https://js.braintreegateway.com/web/dropin/1.33.7/js/dropin.min.js"></script>
+</head>
+<body>
+
+    <div class="cart-summary">
+        <h3>Order Summary</h3>
+        <p>👕 Awesome T-Shirt: <b>$50.00</b> (One-time)</p>
+        <p>⭐ VIP Access: <b>$10.00 / month</b></p>
+    </div>
+
+    <div id="dropin-container"></div>
+    <button id="submit-button" disabled>Loading payment options...</button>
+    
+    <div class="saved-card-info">
+        💳 Paying with your saved Payment Method
+    </div>
+    <button id="instance-button">Instance Pay $50 & Subscribe</button>
+
+    <div id="status-message" style="margin-top: 20px; font-weight: bold; text-align: center;"></div>
+
+    <script>
+        const button = document.querySelector('#submit-button');
+        const instanceButton = document.querySelector('#instance-button');
+        const statusMessage = document.querySelector('#status-message');
+
+        // --- 1. NEW PAYMENT METHOD (BRAINTREE DROP-IN) ---
+        braintree.dropin.create({
+            authorization: 'sandbox_n74fj2s8_ynp56q695xpb6hnj', 
+            container: '#dropin-container',
+            
+            // 👉 THIS ENABLES PAYPAL!
+            // 'vault' flow is REQUIRED if you plan to use this PayPal account for a subscription.
+            paypal: {
+                flow: 'vault' 
+            },
+
+            card: {
+                cardholderName: { required: true }
+            }
+        }, function (createErr, instance) {
+            if (createErr) {
+                console.error('Create Error', createErr);
+                return;
+            }
+
+            button.removeAttribute('disabled');
+            button.innerText = 'Pay $50 & Subscribe';
+
+            button.addEventListener('click', function () {
+                button.setAttribute('disabled', 'true');
+                button.innerText = 'Processing securely...';
+                statusMessage.innerText = '';
+
+                instance.requestPaymentMethod(function (err, payload) {
+                    if (err) {
+                        console.error('Request Payment Method Error', err);
+                        button.removeAttribute('disabled');
+                        button.innerText = 'Pay $50 & Subscribe';
+                        return;
+                    }
+
+                    console.log('Successfully got nonce:', payload.nonce);
+
+                    fetch('http://localhost:8080/api/braintree/checkout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ nonce: payload.nonce })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            statusMessage.style.color = 'red';
+                            statusMessage.innerText = 'Error: ' + data.error;
+                        } else {
+                            statusMessage.style.color = 'green';
+                            statusMessage.innerHTML = `
+                                ✅ Checkout Complete! <br><br>
+                                Transaction ID: ${data.transaction_id} <br>
+                                Subscription ID: ${data.subscription_id}
+                            `;
+                        }
+                    })
+                    .catch(error => console.error('Backend Error:', error))
+                    .finally(() => {
+                        button.removeAttribute('disabled');
+                        button.innerText = 'Pay $50 & Subscribe';
+                    });
+                });
+            });
+        });
+
+        // --- 2. SAVED PAYMENT METHOD (ONE-CLICK) ---
+        instanceButton.addEventListener('click', function () {
+            instanceButton.setAttribute('disabled', 'true');
+            instanceButton.innerText = 'Processing securely...';
+            statusMessage.innerText = '';
+
+            fetch('http://localhost:8080/api/braintree/checkoutWithSavedCard', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nonce: null }) 
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    statusMessage.style.color = 'red';
+                    statusMessage.innerText = 'Error: ' + data.error;
+                } else {
+                    statusMessage.style.color = 'green';
+                    statusMessage.innerHTML = `
+                        ✅ Checkout Complete! <br><br>
+                        Transaction ID: ${data.transaction_id} <br>
+                        Subscription ID: ${data.subscription_id}
+                    `;
+                }
+            })
+            .catch(error => console.error('Backend Error:', error))
+            .finally(() => {
+                instanceButton.removeAttribute('disabled');
+                instanceButton.innerText = 'Instance Pay $50 & Subscribe';
+            });
+        });
+    </script>
+</body>
+</html>
