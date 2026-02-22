@@ -19,6 +19,7 @@ func NewServer(paypalService service.PaypalService, userService service.UserServ
 	e := echo.New()
 
 	e.File("/", "../../web/index.html")
+	e.File("/braintree", "../../web/braintree.html")
 
 	e.Use(middleware.RequestLogger())
 	e.Use(middleware.Recover())
@@ -67,6 +68,10 @@ func (s *Server) setupRoutes() {
 	subscription.GET("/success", s.paypalHandler.HandleSubscriptionSuccess)
 	subscription.GET("/status", s.paypalHandler.GetSubscriptionStatus)
 	subscription.POST("/cancel", s.paypalHandler.CancelSubscription)
+
+	// -------- braintree --------
+	api.POST("/braintree/checkout", s.paypalHandler.ProcessCheckout)
+	api.POST("/braintree/checkoutWithSavedCard", s.paypalHandler.ProcessCheckoutWithSavedCard)
 }
 
 func (s *Server) Start(address string) error {

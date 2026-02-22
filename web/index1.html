@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://www.paypal.com/sdk/js?client-id=AdOhTlMi0m4_ssuz3-3bjF4oU_Nv2Ekh-QbCXr9THeK91splN2PKUPQM1xr9rsHOTS5HloMq_NNiPnHH&components=buttons,hosted-fields&intent=tokenize&vault=true"></script>
+</head>
+<body>
+    <h3>Enter Card Details</h3>
+    
+    <div id="card-form-container">
+        <label>Card Number</label>
+        <div id="card-number" class="field"></div>
+        
+        <label>Expiration Date</label>
+        <div id="expiration-date" class="field"></div>
+        
+        <label>CVV</label>
+        <div id="cvv" class="field"></div>
+        
+        <button id="submit-button">Save Card</button>
+    </div>
+
+    <script>
+        // 1. Initialize the PayPal SDK
+        paypal.Buttons({
+            createOrder: function(data, actions) {
+                // This is for PayPal Wallet payments, we are focusing on Cards below
+            }
+        }).render('#card-form-container'); // Render hidden buttons to init SDK
+        console.log("if Hosted Fields Eligible?", paypal.HostedFields.isEligible());
+        // 2. Render the "Hosted Fields" (The secure card inputs)
+        if (paypal.HostedFields.isEligible()) {
+            paypal.HostedFields.render({
+                createOrder: function () {
+                    // We don't need createOrder for vaulting purely, 
+                    // but the SDK requires a structure.
+                    return "order-id"; 
+                },
+                styles: {
+                    'input': { 'font-size': '16px', 'color': '#333' },
+                    '.invalid': { 'color': 'red' }
+                },
+                fields: {
+                    number: { selector: '#card-number' },
+                    cvv: { selector: '#cvv' },
+                    expirationDate: { selector: '#expiration-date' }
+                }
+            }).then(function (hostedFieldsInstance) {
+                
+                document.querySelector('#submit-button').addEventListener('click', function () {
+                    // 3. Tokenize the Card
+                    // This sends the data directly to PayPal, NOT your server.
+                    hostedFieldsInstance.tokenize({
+                        vault: true,
+                        orderId: null // Not needed for pure vaulting setup
+                    }).then(function (payload) {
+                        console.log('PayPal Tokenization Result:', payload);
+                        
+                        // 4. CRITICAL: Extract the Setup Token ID
+                        // The payload usually contains an 'id' or 'orderId' that acts as the token
+                        // For v3 Vaulting, verify the exact field in the console log. 
+                        // It usually looks like "3X..." or "6T..."
+                        const setupTokenID = payload.id; 
+
+                        // 5. Send this ID to your Go Backend
+                        fetch('/save-card', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ setupTokenID: setupTokenID })
+                        }).then(res => res.json())
+                          .then(data => alert("Subscription Created: " + data.subscriptionID));
+
+                    }).catch(function (err) {
+                        console.error('Tokenization Error:', err);
+                    });
+                });
+            });
+        }
+    </script>
+    
+    <style>
+        .field { height: 40px; border: 1px solid #ccc; margin-bottom: 10px; padding: 5px; }
+    </style>
+</body>
+</html>

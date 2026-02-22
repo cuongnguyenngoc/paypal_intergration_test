@@ -310,3 +310,54 @@ func (h *PaypalHandler) CancelSubscription(c echo.Context) error {
 		"status": "cancelled",
 	})
 }
+
+func (h *PaypalHandler) ProcessCheckout(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	// Parse the JSON body from the frontend
+	var req struct {
+		Nonce string `json:"nonce"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Invalid request payload",
+		})
+	}
+
+	// // Extract the user ID from the token/session
+	// userID, _ := c.Get("user_id").(string)
+
+	// Call your service layer to execute the Vault -> Charge -> Subscribe flow
+	// (This calls the logic we wrote in the previous step)
+	result, err := h.paypalService.BraintreeProcessCheckout(ctx, req.Nonce)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Checkout failed: " + err.Error(),
+		})
+	}
+
+	// Return success to the frontend
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message":         "Checkout Complete!",
+		"transaction_id":  result.TransactionID,
+		"subscription_id": result.SubscriptionID,
+	})
+}
+
+func (h *PaypalHandler) ProcessCheckoutWithSavedCard(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	result, err := h.paypalService.BraintreeProcessCheckoutWithSavedCard(ctx)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Checkout failed: " + err.Error(),
+		})
+	}
+
+	// Return success to the frontend
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message":         "Checkout Complete!",
+		"transaction_id":  result.TransactionID,
+		"subscription_id": result.SubscriptionID,
+	})
+}

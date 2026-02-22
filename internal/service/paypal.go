@@ -31,11 +31,16 @@ type PaypalService interface {
 	HandleSubscriptionSuccess(ctx context.Context, subscriptionID string) error
 	CancelSubscription(ctx context.Context, userID string, merchantID string) error
 	HasActiveSubscription(ctx context.Context, userID string, merchantID string) (bool, error)
+
+	// braintree
+	BraintreeProcessCheckout(ctx context.Context, nonce string) (*BraintreeCheckoutResponse, error)
+	BraintreeProcessCheckoutWithSavedCard(ctx context.Context) (*BraintreeCheckoutResponse, error)
 }
 
 type paypalServiceImpl struct {
 	db               *gorm.DB
 	paypalClient     client.PaypalClient
+	braintreeClient  client.BraintreeClient
 	serviceBaseUrl   string
 	merchantRepo     repository.MerchantRepository
 	productRepo      repository.ProductRepository
@@ -49,6 +54,7 @@ type paypalServiceImpl struct {
 func NewPaypalService(
 	db *gorm.DB,
 	paypalClient client.PaypalClient,
+	braintreeClient client.BraintreeClient,
 	serviceBaseUrl string,
 	merchantRepo repository.MerchantRepository,
 	productRepo repository.ProductRepository,
@@ -61,6 +67,7 @@ func NewPaypalService(
 	return &paypalServiceImpl{
 		db:               db,
 		paypalClient:     paypalClient,
+		braintreeClient:  braintreeClient,
 		serviceBaseUrl:   serviceBaseUrl,
 		merchantRepo:     merchantRepo,
 		productRepo:      productRepo,
@@ -544,4 +551,64 @@ func (s *paypalServiceImpl) setupProductSubPlan(ctx context.Context, merchantID 
 		PayPalProductID: ppProductID,
 		PayPalPlanID:    ppPlanID,
 	})
+}
+
+type BraintreeCheckoutResponse struct {
+	TransactionID  string `json:"transaction_id"`
+	SubscriptionID string `json:"subscription_id"`
+}
+
+func (s *paypalServiceImpl) BraintreeProcessCheckout(ctx context.Context, nonce string) (*BraintreeCheckoutResponse, error) {
+	// 1. Vault the card
+	token, err := s.braintreeClient.VaultPaymentMethod(ctx, nonce, "John", "Doe", "john@example.com")
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("vaulted payment token:", token)
+
+	// 2. Charge the $50 one-time item
+	txID, err := s.braintreeClient.ChargeOneTime(ctx, token, "50.00")
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("transaction ID:", txID)
+
+	// 3. Start the Subscription
+	subID, err := s.braintreeClient.CreateSubscription(ctx, token, "6qkp") // This plan ID should exist in your Braintree sandbox
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("subscription ID:", subID)
+	// Save token, txID, and subID to your database!
+	return &BraintreeCheckoutResponse{
+		TransactionID:  txID,
+		SubscriptionID: subID,
+	}, nil
+}
+
+func (h *paypalServiceImpl) BraintreeProcessCheckoutWithSavedCard(ctx context.Context) (*BraintreeCheckoutResponse, error) {
+	// token := "azfjpvmy"
+	token := "c8qg8xvk"
+
+	// 3. CHARGE THE SAVED TOKEN (Skip the Vaulting step!)
+	// Charge $50
+	txID, err := h.braintreeClient.ChargeOneTime(ctx, token, "50.00")
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("transaction ID with vaulted card:", txID)
+
+	// 4. START SUBSCRIPTION
+	// Start the $10/mo plan
+	subID, err := h.braintreeClient.CreateSubscription(ctx, token, "6qkp")
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("subscription ID with vaulted card:", subID)
+
+	// 5. Return success
+	return &BraintreeCheckoutResponse{
+		TransactionID:  txID,
+		SubscriptionID: subID,
+	}, nil
 }

@@ -33,6 +33,7 @@ func main() {
 
 	db := client.InitMysqlClient(cfg.DatabaseURL)
 	paypalClient := client.NewPaypalClient(&cfg.Paypal)
+	braintreeClient := client.NewBraintreeClient(&cfg.BrainTree)
 
 	productRepo := repository.NewProductRepository(db)
 	err := productRepo.Seed(context.Background())
@@ -49,7 +50,8 @@ func main() {
 
 	paypalService := service.NewPaypalService(
 		db,
-		paypalClient, cfg.BaseURL,
+		paypalClient, braintreeClient,
+		cfg.BaseURL,
 		merchantRepo,
 		productRepo,
 		orderRepo,
